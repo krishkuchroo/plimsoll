@@ -28,7 +28,7 @@ What "done" looks like at 1.0:
 - [x] Facade crate with `redis` feature
 - [x] axum demo in `examples/`
 - [x] `Dockerfile` + `docker-compose.yml` (Redis + 2 instances)
-- [x] Manual smoke test: limit is shared across both instances; 429 + headers; Redis-down fallback (verified against a local Redis; `docker compose up` run still pending)
+- [x] Manual smoke test: limit is shared across both instances; 429 + headers; Redis-down fallback (verified with `docker compose up --build` on 2026-10-12)
 
 ### Phase 2: Release-ready (0.1 on crates.io)
 - [ ] Test suite (owned by the user): unit, Redis integration, concurrency/race tests
@@ -60,4 +60,4 @@ What "done" looks like at 1.0:
 - Sliding window log stores one entry per allowed request, so memory grows with the limit.
 - `LocalFallback` needs the instance count configured by hand. Its per-instance share is `ceil(limit / instances)`, so N instances may admit up to N-1 extra requests when `limit` is not divisible by `instances`.
 - Under `OnStoreError::Deny`, `Retry-After` is the full window because the real usage is unknown.
-- `LocalFallback` state starts empty when Redis goes away, so an instance may briefly admit its full share even if the global window was already full.
+- `LocalFallback` state starts empty when Redis goes away, so an instance may briefly admit its full share even if the global window was already full. Likewise, requests admitted by the fallback are never written to Redis, so the global count under-reports by that amount once Redis is back (observed: ~1 s of fallback traffic during reconnect after `docker compose start redis`).
