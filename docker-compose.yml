@@ -1,0 +1,47 @@
+# Redis plus two demo instances sharing one limit.
+#
+#   docker compose up --build
+#   for i in $(seq 1 12); do curl -si localhost:3001/ | head -1; curl -si localhost:3002/ | head -1; done
+#   docker compose stop redis   # requests now come from LocalFallback (limit / 2 per instance)
+#   docker compose start redis
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  app1:
+    build: .
+    environment:
+      REDIS_URL: redis://redis:6379/
+      INSTANCE_NAME: app1
+      INSTANCES: "2"
+      RATE_LIMIT: "10"
+      RATE_WINDOW_SECS: "60"
+      RUST_LOG: info
+    ports:
+      - "3001:3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  app2:
+    build: .
+    environment:
+      REDIS_URL: redis://redis:6379/
+      INSTANCE_NAME: app2
+      INSTANCES: "2"
+      RATE_LIMIT: "10"
+      RATE_WINDOW_SECS: "60"
+      RUST_LOG: info
+    ports:
+      - "3002:3000"
+    depends_on:
+      redis:
+        condition: service_healthy

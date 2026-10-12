@@ -55,6 +55,6 @@ mod window_log;
 pub use decision::Decision;
 pub use limiter::{LimitError, Limiter, LimiterBuilder};
 pub use local::LocalStore;
-pub use rule::{OnStoreError, Rule, RuleBuilder, RuleError};
+pub use rule::{MAX_WINDOW, OnStoreError, Rule, RuleBuilder, RuleError};
 pub use store::{CheckOutcome, CheckRequest, Store, StoreError};
 pub use window_log::WindowLog;

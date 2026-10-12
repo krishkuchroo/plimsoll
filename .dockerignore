@@ -1,0 +1,5 @@
+target
+docs-pdf
+.git
+*.md
+!README.md

@@ -137,7 +137,11 @@ impl RedisStore {
     /// The three keys used for a `(rule, key)` pair, in `KEYS` order.
     pub fn keys(rule: &str, key: &str) -> [String; 3] {
         let tag = format!("{{{KEY_PREFIX}:{rule}:{key}}}");
-        [format!("{tag}:ts"), format!("{tag}:cost"), format!("{tag}:sum")]
+        [
+            format!("{tag}:ts"),
+            format!("{tag}:cost"),
+            format!("{tag}:sum"),
+        ]
     }
 
     async fn run(&self, request: CheckRequest<'_>) -> Result<CheckOutcome, StoreError> {
@@ -152,13 +156,11 @@ impl RedisStore {
             .arg(request.window_micros())
             .arg(request.cost);
 
-        let reply: (i64, i64, i64, i64) = tokio::time::timeout(
-            self.timeout,
-            invocation.invoke_async(&mut conn),
-        )
-        .await
-        .map_err(|_| StoreError::Timeout(self.timeout))?
-        .map_err(map_error)?;
+        let reply: (i64, i64, i64, i64) =
+            tokio::time::timeout(self.timeout, invocation.invoke_async(&mut conn))
+                .await
+                .map_err(|_| StoreError::Timeout(self.timeout))?
+                .map_err(map_error)?;
 
         parse_reply(reply)
     }
@@ -204,7 +206,10 @@ fn map_error(err: RedisError) -> StoreError {
         StoreError::Timeout(Duration::ZERO)
     } else if err.is_io_error() || err.is_connection_refusal() || err.is_connection_dropped() {
         StoreError::Unavailable(err.to_string())
-    } else if matches!(err.kind(), redis::ErrorKind::Parse | redis::ErrorKind::UnexpectedReturnType) {
+    } else if matches!(
+        err.kind(),
+        redis::ErrorKind::Parse | redis::ErrorKind::UnexpectedReturnType
+    ) {
         StoreError::Protocol(err.to_string())
     } else {
         StoreError::Other(err.to_string())

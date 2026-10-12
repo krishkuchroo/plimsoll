@@ -4,7 +4,7 @@
 
 Distributed rate limiting for Rust. One global limit, enforced across every instance of your service, backed by Redis.
 
-**Status:** pre-release (MVP in progress). See [PLAN.md](PLAN.md) for the roadmap.
+**Status:** pre-release (MVP complete, not yet on crates.io). See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Why
 
@@ -19,14 +19,14 @@ A rate limiter running inside each instance can be bypassed by spreading request
 - **HTTP-ready decisions**: `Retry-After`, `RateLimit` and `RateLimit-Policy` headers, and `Cache-Control: no-store` for 429s ([RFC 6585](https://www.rfc-editor.org/rfc/rfc6585#section-4)).
 - **Framework-agnostic**: works with axum, actix, tonic, or anything async.
 
-## Usage (planned API)
+## Usage
 
 ```rust
 use plimsoll::{Limiter, Rule, OnStoreError};
 use plimsoll::redis::RedisStore;
 use std::time::Duration;
 
-let store = RedisStore::connect("redis://127.0.0.1/").await?;
+let store = RedisStore::connect("redis://127.0.0.1/").await?;  // or RedisConfig for timeouts
 let limiter = Limiter::builder(store).instances(2).build();
 
 let api = Rule::builder("api")
@@ -45,6 +45,40 @@ if !decision.allowed {
     // respond 429 with decision.headers()
 }
 ```
+
+`Decision` carries `allowed`, `limit`, `remaining`, `retry_after`, `reset_after`, `degraded` and the store error (if any). `decision.headers()` returns the IETF `RateLimit-Policy` / `RateLimit` fields on every response, plus `Retry-After` and `Cache-Control: no-store` on denial:
+
+```text
+HTTP/1.1 429 Too Many Requests
+ratelimit-policy: "api";q=100;w=60
+ratelimit: "api";r=0;t=17
+retry-after: 17
+cache-control: no-store
+```
+
+Single-instance services, or tests, can use `plimsoll::LocalStore` instead of Redis with the same API.
+
+## Crates
+
+| Crate | Contents |
+|---|---|
+| `plimsoll` | Facade. Re-exports `plimsoll-core`; the `redis` feature (default) adds `plimsoll::redis::RedisStore`. |
+| `plimsoll-core` | `Rule`, `Decision`, `Store` trait, `Limiter`, `LocalStore`, `WindowLog`. No network I/O. |
+| `plimsoll-redis` | `RedisStore` and the Lua sliding window log. |
+
+## Demo
+
+`examples/axum-demo` is one axum service; `docker compose` runs two copies of it behind one Redis, sharing a limit of 10 requests per 60 seconds:
+
+```sh
+docker compose up --build
+for i in $(seq 1 6); do curl -si localhost:3001/ | head -1; curl -si localhost:3002/ | head -1; done
+# ten 200s, then 429s from both instances
+docker compose stop redis   # responses now have "degraded": true and each instance enforces 5/60s
+docker compose start redis
+```
+
+Requests are keyed by the `x-api-key` header (default `anonymous`). Without Docker, run `redis-server` locally and start the binary twice with different `PORT` and `INSTANCE_NAME` values; see the comment at the top of `examples/axum-demo/src/main.rs` for all variables.
 
 ## How it works
 
@@ -75,3 +109,19 @@ The design draws on:
 ## License
 
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option.
+
+## Store failures
+
+Every rule chooses what happens when Redis cannot answer (`OnStoreError`):
+
+| Policy | Behaviour |
+|---|---|
+| `LocalFallback` (default) | Enforce `ceil(limit / instances)` in-process until the store is back. |
+| `Allow` | Fail open. |
+| `Deny` | Fail closed, with `Retry-After` set to the full window. |
+
+Whichever policy applies, `Decision.degraded` is `true` and `Decision.store_error` says why.
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.

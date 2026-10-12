@@ -73,7 +73,9 @@ impl WindowLog {
             self.sum += cost;
             None
         } else {
-            Some(Duration::from_micros(self.retry_after(now, window, limit, cost)))
+            Some(Duration::from_micros(
+                self.retry_after(now, window, limit, cost),
+            ))
         };
 
         let reset_after = self

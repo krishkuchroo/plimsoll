@@ -14,21 +14,21 @@ What "done" looks like at 1.0:
 
 ## Phases
 
-### Phase 0: Foundation ✅ (current)
+### Phase 0: Foundation ✅
 - [x] Read and summarise the reference papers
 - [x] Lock the MVP design (see `CLAUDE.md`)
 - [x] `CLAUDE.md`, `SKILLS.md`, `PLAN.md`, `README.md`, `git init`
 
-### Phase 1: MVP
-- [ ] Cargo workspace: `plimsoll-core`, `plimsoll-redis`, `plimsoll`
-- [ ] Core: `Rule` builder, `Decision` + `headers()`, `Store` trait, `OnStoreError`, `Limiter`
-- [ ] Core: in-memory deque `LocalStore` (used for `LocalFallback`)
-- [ ] Redis: Lua sliding window log on LIST deques (`ts`, `cost`, `sum`), Redis `TIME`, clock clamp, retry/reset calculation
-- [ ] Redis: `RedisStore` with `ConnectionManager` and a per-call timeout
-- [ ] Facade crate with `redis` feature
-- [ ] axum demo in `examples/`
-- [ ] `Dockerfile` + `docker-compose.yml` (Redis + 2 instances)
-- [ ] Manual smoke test: limit is shared across both instances; 429 + headers; Redis-down fallback
+### Phase 1: MVP ✅ (current)
+- [x] Cargo workspace: `plimsoll-core`, `plimsoll-redis`, `plimsoll`
+- [x] Core: `Rule` builder, `Decision` + `headers()`, `Store` trait, `OnStoreError`, `Limiter`
+- [x] Core: in-memory deque `LocalStore` (used for `LocalFallback`)
+- [x] Redis: Lua sliding window log on LIST deques (`ts`, `cost`, `sum`), Redis `TIME`, clock clamp, retry/reset calculation
+- [x] Redis: `RedisStore` with `ConnectionManager` and a per-call timeout
+- [x] Facade crate with `redis` feature
+- [x] axum demo in `examples/`
+- [x] `Dockerfile` + `docker-compose.yml` (Redis + 2 instances)
+- [x] Manual smoke test: limit is shared across both instances; 429 + headers; Redis-down fallback (verified against a local Redis; `docker compose up` run still pending)
 
 ### Phase 2: Release-ready (0.1 on crates.io)
 - [ ] Test suite (owned by the user): unit, Redis integration, concurrency/race tests
@@ -58,4 +58,6 @@ What "done" looks like at 1.0:
 - Clock going backwards is handled by clamping to the newest entry, not fully solved.
 - Single Redis node only.
 - Sliding window log stores one entry per allowed request, so memory grows with the limit.
-- `LocalFallback` needs the instance count configured by hand.
+- `LocalFallback` needs the instance count configured by hand. Its per-instance share is `ceil(limit / instances)`, so N instances may admit up to N-1 extra requests when `limit` is not divisible by `instances`.
+- Under `OnStoreError::Deny`, `Retry-After` is the full window because the real usage is unknown.
+- `LocalFallback` state starts empty when Redis goes away, so an instance may briefly admit its full share even if the global window was already full.
