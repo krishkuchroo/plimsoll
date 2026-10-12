@@ -1,0 +1,17 @@
+[package]
+name = "plimsoll-redis"
+description = "Redis store for plimsoll: atomic sliding window log in Lua"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+plimsoll-core = { workspace = true }
+redis = { workspace = true, features = ["tokio-comp", "connection-manager", "script"] }
+tokio = { workspace = true, features = ["time"] }
+thiserror = { workspace = true }

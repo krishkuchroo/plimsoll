@@ -1,0 +1,20 @@
+[package]
+name = "plimsoll"
+description = "Distributed API rate limiting for Rust, backed by Redis"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+
+[features]
+default = ["redis"]
+redis = ["dep:plimsoll-redis"]
+
+[dependencies]
+plimsoll-core = { workspace = true }
+plimsoll-redis = { workspace = true, optional = true }
