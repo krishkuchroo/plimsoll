@@ -13,6 +13,8 @@
 //!
 //! Requests are keyed by the `x-api-key` header, falling back to `anonymous`,
 //! so a plain `curl` against both instances hits the same bucket.
+//!
+//! `GET /metrics` returns this instance's counters in Prometheus text format.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,13 +25,14 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use plimsoll::redis::{RedisConfig, RedisStore};
-use plimsoll::{Decision, Limiter, Rule};
+use plimsoll::{Decision, Limiter, Metrics, Rule};
 use serde_json::json;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
 struct AppState {
     limiter: Arc<Limiter<RedisStore>>,
+    metrics: Arc<Metrics>,
     rule: Rule,
     instance: Arc<str>,
 }
@@ -57,10 +60,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // OnStoreError policy (LocalFallback here).
     let store =
         RedisStore::connect_with(redis_url.as_str(), RedisConfig::default().lazy(true)).await?;
-    let limiter = Limiter::builder(store).instances(instances).build();
+    let metrics = Arc::new(Metrics::new());
+    let limiter = Limiter::builder(store)
+        .instances(instances)
+        .observer(Arc::clone(&metrics))
+        .build();
 
     let state = AppState {
         limiter: Arc::new(limiter),
+        metrics,
         rule,
         instance: Arc::clone(&instance),
     };
@@ -68,6 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/", get(index))
         .route("/healthz", get(|| async { "ok" }))
+        .route("/metrics", get(metrics_handler))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
@@ -121,6 +130,16 @@ async fn index(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let mut response = (status, axum::Json(body)).into_response();
     apply_headers(&mut response, &decision);
     response
+}
+
+async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+    (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
+        state.metrics.render_prometheus(),
+    )
 }
 
 /// Copy `Decision::headers()` onto an HTTP response.

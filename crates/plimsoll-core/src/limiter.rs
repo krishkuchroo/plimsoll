@@ -1,6 +1,9 @@
 use std::sync::Arc;
+use std::time::Instant;
 
-use crate::{CheckRequest, Decision, LocalStore, OnStoreError, Rule, Store, StoreError};
+use crate::{
+    CheckEvent, CheckRequest, Decision, LocalStore, Observer, OnStoreError, Rule, Store, StoreError,
+};
 
 /// Checks requests against rules using a [`Store`], with a fallback policy
 /// for when the store cannot answer.
@@ -8,12 +11,23 @@ use crate::{CheckRequest, Decision, LocalStore, OnStoreError, Rule, Store, Store
 /// Create one with [`Limiter::builder`] (or [`Limiter::new`] for defaults)
 /// and share it across your handlers, typically behind an `Arc` or inside
 /// framework state.
-#[derive(Debug)]
 pub struct Limiter<S> {
     store: S,
     local: LocalStore,
     instances: u32,
     on_store_error: OnStoreError,
+    observer: Option<Arc<dyn Observer>>,
+}
+
+impl<S: std::fmt::Debug> std::fmt::Debug for Limiter<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Limiter")
+            .field("store", &self.store)
+            .field("instances", &self.instances)
+            .field("on_store_error", &self.on_store_error)
+            .field("observer", &self.observer.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 impl<S: Store> Limiter<S> {
@@ -23,6 +37,7 @@ impl<S: Store> Limiter<S> {
             store,
             instances: 1,
             on_store_error: OnStoreError::default(),
+            observer: None,
         }
     }
 
@@ -73,20 +88,40 @@ impl<S: Store> Limiter<S> {
             window: rule.window(),
             cost,
         };
-        match self.store.check(request).await {
-            Ok(outcome) => Ok(Decision::from_outcome(
-                rule.name_arc(),
-                limit,
+        let started = Instant::now();
+        let result = self.store.check(request).await;
+        let store_latency = started.elapsed();
+        let (decision, fallback) = match result {
+            Ok(outcome) => (
+                Decision::from_outcome(rule.name_arc(), limit, cost, rule.window(), outcome),
+                None,
+            ),
+            Err(err) => {
+                let policy = rule.on_store_error().unwrap_or(self.on_store_error);
+                (self.degrade(rule, policy, request, err), Some(policy))
+            }
+        };
+        if let Some(observer) = &self.observer {
+            observer.on_check(&CheckEvent {
+                rule: rule.name(),
+                key,
                 cost,
-                rule.window(),
-                outcome,
-            )),
-            Err(err) => Ok(self.degrade(rule, request, err)),
+                allowed: decision.allowed,
+                fallback,
+                store_error: decision.store_error.as_ref(),
+                store_latency,
+            });
         }
+        Ok(decision)
     }
 
-    fn degrade(&self, rule: &Rule, request: CheckRequest<'_>, err: StoreError) -> Decision {
-        let policy = rule.on_store_error().unwrap_or(self.on_store_error);
+    fn degrade(
+        &self,
+        rule: &Rule,
+        policy: OnStoreError,
+        request: CheckRequest<'_>,
+        err: StoreError,
+    ) -> Decision {
         let mut decision = match policy {
             OnStoreError::Allow => Decision {
                 allowed: true,
@@ -145,11 +180,22 @@ fn local_share(limit: u64, instances: u32) -> u64 {
 }
 
 /// Builder for [`Limiter`]. Created by [`Limiter::builder`].
-#[derive(Debug)]
 pub struct LimiterBuilder<S> {
     store: S,
     instances: u32,
     on_store_error: OnStoreError,
+    observer: Option<Arc<dyn Observer>>,
+}
+
+impl<S: std::fmt::Debug> std::fmt::Debug for LimiterBuilder<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LimiterBuilder")
+            .field("store", &self.store)
+            .field("instances", &self.instances)
+            .field("on_store_error", &self.on_store_error)
+            .field("observer", &self.observer.is_some())
+            .finish()
+    }
 }
 
 impl<S: Store> LimiterBuilder<S> {
@@ -168,6 +214,14 @@ impl<S: Store> LimiterBuilder<S> {
         self
     }
 
+    /// Call `observer` once after every check, for metrics or logging.
+    /// See [`Metrics`](crate::Metrics) for a ready-made collector.
+    /// Replaces any observer set earlier.
+    pub fn observer(mut self, observer: impl Observer) -> Self {
+        self.observer = Some(Arc::new(observer));
+        self
+    }
+
     /// Build the limiter.
     pub fn build(self) -> Limiter<S> {
         Limiter {
@@ -175,6 +229,7 @@ impl<S: Store> LimiterBuilder<S> {
             local: LocalStore::new(),
             instances: self.instances,
             on_store_error: self.on_store_error,
+            observer: self.observer,
         }
     }
 }

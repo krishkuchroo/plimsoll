@@ -110,6 +110,22 @@ The design draws on:
 
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option.
 
+## Metrics
+
+Attach an observer to see every decision. The built-in `Metrics` collector counts allowed, denied and degraded checks per rule, counts store errors by kind, and records store latency as a histogram. It renders Prometheus text with no extra dependencies:
+
+```rust
+use plimsoll::Metrics;
+use std::sync::Arc;
+
+let metrics = Arc::new(Metrics::new());
+let limiter = Limiter::builder(store).observer(Arc::clone(&metrics)).build();
+// in your /metrics handler:
+let body = metrics.render_prometheus();
+```
+
+To feed another metrics system, implement `plimsoll::Observer` instead. The demo serves `GET /metrics`.
+
 ## Store failures
 
 Every rule chooses what happens when Redis cannot answer (`OnStoreError`):

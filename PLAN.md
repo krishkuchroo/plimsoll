@@ -45,7 +45,8 @@ What "done" looks like at 1.0:
 - [ ] Rules from YAML/TOML, plus hot reload
 - [ ] Multiple rules per request (e.g. per-user AND per-IP) in one round trip
 - [ ] Framework adapters as separate crates: `plimsoll-tower`, `plimsoll-actix`
-- [ ] Metrics hooks (allowed/denied/degraded counts, store latency)
+- [x] Metrics hooks (allowed/denied/degraded counts, store latency): `Observer` trait + built-in `Metrics` with Prometheus text output, added 2026-10-13 (additive public API, not breaking)
+- [ ] Metrics follow-ups: optional `metrics`-crate / OpenTelemetry bridge crates; Redis-side gauges (key count, memory)
 - [ ] Pipelining / batching to cut Redis round trips
 
 ### Phase 4: Beyond a central store

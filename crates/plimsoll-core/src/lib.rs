@@ -12,6 +12,8 @@
 //! - [`LocalStore`]: an in-process store used on its own for single-instance
 //!   services and by [`Limiter`] as the [`OnStoreError::LocalFallback`] path.
 //! - [`Limiter`]: ties a store, a fallback policy and rules together.
+//! - [`Observer`] and [`Metrics`]: per-check hook and a built-in collector
+//!   that renders Prometheus text.
 //!
 //! The algorithm is a sliding window log: every allowed request is recorded
 //! with its timestamp and cost, entries older than the window are evicted on
@@ -48,6 +50,7 @@
 mod decision;
 mod limiter;
 mod local;
+mod metrics;
 mod rule;
 mod store;
 mod window_log;
@@ -55,6 +58,7 @@ mod window_log;
 pub use decision::Decision;
 pub use limiter::{LimitError, Limiter, LimiterBuilder};
 pub use local::LocalStore;
+pub use metrics::{CheckEvent, LATENCY_BUCKETS, Metrics, Observer, RuleSnapshot};
 pub use rule::{MAX_WINDOW, OnStoreError, Rule, RuleBuilder, RuleError};
 pub use store::{CheckOutcome, CheckRequest, Store, StoreError};
 pub use window_log::WindowLog;
