@@ -13,6 +13,27 @@ Reference material lives in `docs-pdf/`:
 - `drl-sigcomm07.pdf` — Raghavan et al., *Cloud Control with Distributed Rate Limiting* (GRD/FPS, gossip, 1/N degradation). Basis for `LocalFallback` and the long-term roadmap.
 - `distributed_rate_limiter.pdf` — a re-implementation of the SIGCOMM paper; practical tuning notes.
 
+## Current status (2026-10-12)
+
+**Phase 1 (MVP) is done; Phase 2 (release-ready) has not started.** Nothing is published to crates.io yet.
+
+- All three crates build; `clippy -D warnings`, `fmt` and rustdoc are clean.
+- `docker compose up --build` smoke test passed: 10/60s shared across both instances, 429 + headers, 5-per-instance fallback with Redis stopped, recovery on restart.
+- No test suite yet (user-owned). The only automated check is the crate-level doc example.
+- There is no UI. plimsoll is a library; the only runnable thing is the axum demo, which returns JSON.
+- Unconfirmed defaults chosen during the build (fallback `limit` reporting, `Deny` retry-after, `ceil` share, fixed `plimsoll` key prefix, 250 ms timeout) are listed under "Known limitations" in `PLAN.md`. Treat them as open, not locked.
+
+### Where things live
+
+| Path | What |
+|---|---|
+| `crates/plimsoll-core/src/window_log.rs` | Reference sliding window log; the Lua script must match it |
+| `crates/plimsoll-core/src/limiter.rs` | `Limiter`, `OnStoreError` handling, fallback share |
+| `crates/plimsoll-core/src/decision.rs` | `Decision` and `headers()` |
+| `crates/plimsoll-redis/src/sliding_window.lua` | The atomic Redis check |
+| `crates/plimsoll-redis/src/store.rs` | `RedisStore`, `RedisConfig`, reply parsing, error mapping |
+| `examples/axum-demo/src/main.rs` | Demo service, configured by env vars |
+
 ## Locked design decisions
 
 Do not change these without asking the user.
