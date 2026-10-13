@@ -61,3 +61,9 @@ What "done" looks like at 1.0:
 - `LocalFallback` needs the instance count configured by hand. Its per-instance share is `ceil(limit / instances)`, so N instances may admit up to N-1 extra requests when `limit` is not divisible by `instances`.
 - Under `OnStoreError::Deny`, `Retry-After` is the full window because the real usage is unknown.
 - `LocalFallback` state starts empty when Redis goes away, so an instance may briefly admit its full share even if the global window was already full. Likewise, requests admitted by the fallback are never written to Redis, so the global count under-reports by that amount once Redis is back (observed: ~1 s of fallback traffic during reconnect after `docker compose start redis`).
+
+## Open decisions (defaults chosen during the MVP build, not yet confirmed)
+- Under `LocalFallback`, `Decision.limit` reports the per-instance share (e.g. 5), not the rule's limit.
+- The Redis key prefix is fixed to `plimsoll`; two deployments sharing one Redis and rule names would collide. A `prefix` option on `RedisConfig` would fix it.
+- `RedisConfig` defaults: 250 ms per-call timeout, 1 s connect timeout, one reconnect attempt per call.
+- Only the structured-field IETF `RateLimit` / `RateLimit-Policy` headers are emitted; no legacy `X-RateLimit-*`.

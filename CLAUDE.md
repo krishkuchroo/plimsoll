@@ -21,7 +21,7 @@ Reference material lives in `docs-pdf/`:
 - `docker compose up --build` smoke test passed: 10/60s shared across both instances, 429 + headers, 5-per-instance fallback with Redis stopped, recovery on restart.
 - No test suite yet (user-owned). The only automated check is the crate-level doc example.
 - There is no UI. plimsoll is a library; the only runnable thing is the axum demo, which returns JSON.
-- Unconfirmed defaults chosen during the build (fallback `limit` reporting, `Deny` retry-after, `ceil` share, fixed `plimsoll` key prefix, 250 ms timeout) are listed under "Known limitations" in `PLAN.md`. Treat them as open, not locked.
+- Unconfirmed defaults chosen during the build (fallback `limit` reporting, `Deny` retry-after, `ceil` share, fixed `plimsoll` key prefix, 250 ms timeout) are listed under "Known limitations" and "Open decisions" in `PLAN.md`. Treat them as open, not locked.
 
 ### Where things live
 
