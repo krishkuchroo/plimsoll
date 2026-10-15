@@ -93,7 +93,11 @@ impl WindowLog {
     }
 
     fn evict(&mut self, now: u64, window: u64) {
-        let cutoff = now.saturating_sub(window);
+        // Before `now` reaches `window` nothing can have expired. Saturating
+        // to 0 here would wrongly evict entries recorded at t = 0.
+        let Some(cutoff) = now.checked_sub(window) else {
+            return;
+        };
         while let Some(&oldest) = self.ts.front() {
             if oldest > cutoff {
                 break;

@@ -19,7 +19,7 @@ Reference material lives in `docs-pdf/`:
 
 - All three crates build; `clippy -D warnings`, `fmt` and rustdoc are clean.
 - `docker compose up --build` smoke test passed: 10/60s shared across both instances, 429 + headers, 5-per-instance fallback with Redis stopped, recovery on restart.
-- No test suite yet (user-owned). The only automated check is the crate-level doc example.
+- Testing started 2026-10-15 at the user's request; plan and stages in `TESTING.md`. Stages 1–2 done: `WindowLog` unit + property tests, golden regression suites over a trace dataset (`crates/plimsoll-core/tests/`), and Redis-vs-`WindowLog` differential tests (`crates/plimsoll-redis/tests/differential.rs`, needs a local Redis). The Lua script has a tests-only clock (`ARGV[4]`, `test-clock` feature).
 - There is no UI. plimsoll is a library; the only runnable thing is the axum demo, which returns JSON and serves Prometheus metrics at `/metrics`.
 - Unconfirmed defaults chosen during the build (fallback `limit` reporting, `Deny` retry-after, `ceil` share, fixed `plimsoll` key prefix, 250 ms timeout) are listed under "Known limitations" and "Open decisions" in `PLAN.md`. Treat them as open, not locked.
 
@@ -75,5 +75,6 @@ Do not change these without asking the user.
 ```sh
 cargo build --workspace
 cargo clippy --workspace --all-targets
+cargo test --workspace           # Redis tests skip unless Redis is reachable (PLIMSOLL_REDIS_URL)
 docker compose up --build        # Redis + 2 demo instances (ports 3001, 3002)
 ```

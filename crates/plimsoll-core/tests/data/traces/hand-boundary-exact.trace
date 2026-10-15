@@ -1,0 +1,8 @@
+# Entry at t expires at exactly t + window; one microsecond earlier it still counts.
+window 1000
+limit 1
+5000 1
+5999 1    # denied
+6000 1    # allowed
+6999 1    # denied
+7000 1    # allowed

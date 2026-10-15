@@ -1,0 +1,9 @@
+# Timestamps below the window, as a fresh LocalStore produces.
+# Regression for the 2026-10-15 bug: entries at t=0 were evicted at once.
+window 1000
+limit 2
+0 1
+0 1
+0 1       # denied
+999 1     # denied
+1000 1    # allowed: both t=0 entries expire together

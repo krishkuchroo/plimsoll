@@ -1,0 +1,33 @@
+first request
+    allowed=true degraded=false limit=10 remaining=9 retry_s=- err=-
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=9;t=60
+last slot
+    allowed=true degraded=false limit=10 remaining=0 retry_s=- err=-
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=2
+denied, retry 1.2s
+    allowed=false degraded=false limit=10 remaining=0 retry_s=2 err=-
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=2 | Retry-After: 2 | Cache-Control: no-store
+denied, retry <1ms rounds to 1s
+    allowed=false degraded=false limit=10 remaining=0 retry_s=1 err=-
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=0 | Retry-After: 1 | Cache-Control: no-store
+denied, retry exactly 2s
+    allowed=false degraded=false limit=10 remaining=0 retry_s=2 err=-
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=2 | Retry-After: 2 | Cache-Control: no-store
+window 500ms reports w=1
+    allowed=true degraded=false limit=3 remaining=2 retry_s=- err=-
+    RateLimit-Policy: "fast";q=3;w=1 | RateLimit: "fast";r=2;t=1
+window 1 year
+    allowed=true degraded=false limit=1 remaining=0 retry_s=- err=-
+    RateLimit-Policy: "yearly";q=1;w=31536000 | RateLimit: "yearly";r=0;t=31536000
+used > limit is clamped
+    allowed=false degraded=false limit=10 remaining=0 retry_s=1 err=-
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=1 | Retry-After: 1 | Cache-Control: no-store
+rule name with colon
+    allowed=true degraded=false limit=5 remaining=4 retry_s=- err=-
+    RateLimit-Policy: "v1:login";q=5;w=60 | RateLimit: "v1:login";r=4;t=60
+rule name with semicolon
+    allowed=true degraded=false limit=5 remaining=4 retry_s=- err=-
+    RateLimit-Policy: "a;q=999";q=5;w=60 | RateLimit: "a;q=999";r=4;t=60
+rule name unicode
+    allowed=true degraded=false limit=5 remaining=4 retry_s=- err=-
+    RateLimit-Policy: "ゲート";q=5;w=60 | RateLimit: "ゲート";r=4;t=60

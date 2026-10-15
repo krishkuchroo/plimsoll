@@ -1,0 +1,8 @@
+# hand-large-timestamps (window 60000000, limit 2)
+1792000000000000 1 -> A used=1 retry=- reset=60000000
+1792000000000001 1 -> A used=2 retry=- reset=59999999
+1792000059999999 1 -> D used=2 retry=1 reset=1
+1792000060000000 1 -> A used=2 retry=- reset=1
+1792000060000001 1 -> A used=2 retry=- reset=59999999
+1792000060000002 1 -> D used=2 retry=59999998 reset=59999998
+# allowed 4, denied 2

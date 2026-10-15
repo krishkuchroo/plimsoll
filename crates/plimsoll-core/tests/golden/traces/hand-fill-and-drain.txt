@@ -1,0 +1,12 @@
+# hand-fill-and-drain (window 1000, limit 5)
+100 1 -> A used=1 retry=- reset=1000
+200 1 -> A used=2 retry=- reset=900
+300 1 -> A used=3 retry=- reset=800
+400 1 -> A used=4 retry=- reset=700
+500 1 -> A used=5 retry=- reset=600
+600 1 -> D used=5 retry=500 reset=500
+1099 1 -> D used=5 retry=1 reset=1
+1100 1 -> A used=5 retry=- reset=100
+1199 1 -> D used=5 retry=1 reset=1
+1200 1 -> A used=5 retry=- reset=100
+# allowed 7, denied 3

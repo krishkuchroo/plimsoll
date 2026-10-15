@@ -31,7 +31,10 @@ What "done" looks like at 1.0:
 - [x] Manual smoke test: limit is shared across both instances; 429 + headers; Redis-down fallback (verified with `docker compose up --build` on 2026-10-12)
 
 ### Phase 2: Release-ready (0.1 on crates.io)
-- [ ] Test suite (owned by the user): unit, Redis integration, concurrency/race tests
+- [ ] Test suite: unit, Redis integration, concurrency/race tests. Plan and progress in `TESTING.md`; stage 1 (`WindowLog`) done 2026-10-15
+- [x] Stage 2 (Redis vs `WindowLog` differential tests) done 2026-10-15, using the `test-clock` feature (optional `ARGV[4]` in the Lua script; see `TESTING.md`)
+- [x] **Breaking (pre-release):** `RuleBuilder::build` now rejects windows under `MIN_WINDOW` (1 ms), limits over `MAX_LIMIT` (2^53), and rule names containing `"` or `\`. New `RuleError::{WindowTooShort, LimitTooLarge}` variants; new consts `MIN_WINDOW`, `MAX_LIMIT`. Added 2026-10-15
+- [x] Fix: `WindowLog` evicted entries at `t = 0` while `now < window` (saturating cutoff), unlike the Lua script. Found by the stage 1 property test
 - [ ] CI: fmt, clippy, build, tests against Redis
 - [ ] Benchmarks (criterion) + a load-test write-up
 - [ ] rustdoc for every public item, crate-level examples
@@ -67,4 +70,5 @@ What "done" looks like at 1.0:
 - Under `LocalFallback`, `Decision.limit` reports the per-instance share (e.g. 5), not the rule's limit.
 - The Redis key prefix is fixed to `plimsoll`; two deployments sharing one Redis and rule names would collide. A `prefix` option on `RedisConfig` would fix it.
 - `RedisConfig` defaults: 250 ms per-call timeout, 1 s connect timeout, one reconnect attempt per call.
+- Rule names may contain `:`, so rule `api:a` + key `b` collides with rule `api` + key `a:b` in Redis. Forbid `:` in rule names, or escape/length-prefix the rule in the key? (found by testing, 2026-10-15)
 - Only the structured-field IETF `RateLimit` / `RateLimit-Policy` headers are emitted; no legacy `X-RateLimit-*`.

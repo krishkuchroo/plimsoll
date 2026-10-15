@@ -1,0 +1,9 @@
+# hand-weighted-cost (window 1000, limit 10)
+0 4 -> A used=4 retry=- reset=1000
+10 4 -> A used=8 retry=- reset=990
+20 2 -> A used=10 retry=- reset=980
+30 1 -> D used=10 retry=970 reset=970
+40 11 -> D used=10 retry=1000 reset=960
+1000 5 -> D used=6 retry=10 reset=10
+1010 5 -> A used=7 retry=- reset=10
+# allowed 4, denied 3

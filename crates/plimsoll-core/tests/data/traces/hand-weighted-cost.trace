@@ -1,0 +1,11 @@
+# Weighted costs: cost == remaining fits, cost > limit never fits,
+# retry_after must wait for enough cost to expire, not just one entry.
+window 1000
+limit 10
+0 4
+10 4
+20 2      # == remaining, allowed
+30 1      # denied, retry when t=0 entry expires
+40 11     # cost > limit: denied, retry = full window
+1000 5    # t=0 expired (4 freed), 6 used + 5 > 10: denied
+1010 5    # t=10 expired too: allowed

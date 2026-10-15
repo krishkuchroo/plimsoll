@@ -6,6 +6,15 @@ use std::time::Duration;
 /// bound and anything longer is almost certainly a configuration mistake.
 pub const MAX_WINDOW: Duration = Duration::from_secs(366 * 24 * 60 * 60);
 
+/// Shortest window a rule may use. Stores work in whole microseconds and
+/// Redis expires keys in whole milliseconds, so a shorter window would round
+/// down and stop limiting anything.
+pub const MIN_WINDOW: Duration = Duration::from_millis(1);
+
+/// Largest limit a rule may use: 2^53, the largest integer a Lua double
+/// (used by the Redis script) represents exactly.
+pub const MAX_LIMIT: u64 = 1 << 53;
+
 /// What a [`Limiter`](crate::Limiter) does when the store cannot answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum OnStoreError {
@@ -85,13 +94,14 @@ pub struct RuleBuilder {
 }
 
 impl RuleBuilder {
-    /// Maximum total cost per window. Required and must be at least 1.
+    /// Maximum total cost per window. Required, at least 1 and at most
+    /// [`MAX_LIMIT`].
     pub fn limit(mut self, limit: u64) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    /// Window length. Required, must be non-zero and at most [`MAX_WINDOW`].
+    /// Window length. Required, between [`MIN_WINDOW`] and [`MAX_WINDOW`].
     pub fn window(mut self, window: Duration) -> Self {
         self.window = Some(window);
         self
@@ -111,17 +121,19 @@ impl RuleBuilder {
         }
         if name
             .chars()
-            .any(|c| c == '{' || c == '}' || c.is_whitespace() || c.is_control())
+            .any(|c| matches!(c, '{' | '}' | '"' | '\\') || c.is_whitespace() || c.is_control())
         {
             return Err(RuleError::InvalidName(name.to_owned()));
         }
         let limit = match self.limit {
             Some(0) | None => return Err(RuleError::ZeroLimit),
+            Some(limit) if limit > MAX_LIMIT => return Err(RuleError::LimitTooLarge(limit)),
             Some(limit) => limit,
         };
         let window = match self.window {
             None => return Err(RuleError::ZeroWindow),
             Some(window) if window.is_zero() => return Err(RuleError::ZeroWindow),
+            Some(window) if window < MIN_WINDOW => return Err(RuleError::WindowTooShort(window)),
             Some(window) if window > MAX_WINDOW => return Err(RuleError::WindowTooLong(window)),
             Some(window) => window,
         };
@@ -140,16 +152,25 @@ pub enum RuleError {
     /// The name was empty or only whitespace.
     #[error("rule name must not be empty")]
     EmptyName,
-    /// The name contained braces, whitespace or control characters. Braces
-    /// would interfere with the Redis Cluster hash tag.
-    #[error("rule name {0:?} must not contain braces, whitespace or control characters")]
+    /// The name contained braces, quotes, backslashes, whitespace or control
+    /// characters. Braces would interfere with the Redis Cluster hash tag;
+    /// quotes and backslashes would break the `RateLimit` header strings.
+    #[error(
+        "rule name {0:?} must not contain braces, quotes, backslashes, whitespace or control characters"
+    )]
     InvalidName(String),
     /// `limit` was missing or zero.
     #[error("rule limit must be at least 1")]
     ZeroLimit,
+    /// `limit` exceeded [`MAX_LIMIT`].
+    #[error("rule limit {0} exceeds the maximum of {MAX_LIMIT}")]
+    LimitTooLarge(u64),
     /// `window` was missing or zero.
     #[error("rule window must be longer than zero")]
     ZeroWindow,
+    /// `window` was shorter than [`MIN_WINDOW`].
+    #[error("rule window {0:?} is shorter than the minimum of {MIN_WINDOW:?}")]
+    WindowTooShort(Duration),
     /// `window` exceeded [`MAX_WINDOW`].
     #[error("rule window {0:?} exceeds the maximum of {MAX_WINDOW:?}")]
     WindowTooLong(Duration),

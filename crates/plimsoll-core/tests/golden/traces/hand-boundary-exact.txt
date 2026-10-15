@@ -1,0 +1,7 @@
+# hand-boundary-exact (window 1000, limit 1)
+5000 1 -> A used=1 retry=- reset=1000
+5999 1 -> D used=1 retry=1 reset=1
+6000 1 -> A used=1 retry=- reset=1000
+6999 1 -> D used=1 retry=1 reset=1
+7000 1 -> A used=1 retry=- reset=1000
+# allowed 3, denied 2

@@ -1,0 +1,14 @@
+# allowed 103, denied 97  gen-bursty
+# allowed 109, denied 91  gen-clock-jitter
+# allowed 50, denied 100  gen-edge-bursts
+# allowed 121, denied 79  gen-heavy-tail
+# allowed 59, denied 141  gen-mixed-cost
+# allowed 13, denied 107  gen-near-zero
+# allowed 100, denied 20  gen-steady
+# allowed 153, denied 47  gen-uniform
+# allowed 3, denied 2  hand-boundary-exact
+# allowed 4, denied 1  hand-clock-backwards
+# allowed 7, denied 3  hand-fill-and-drain
+# allowed 4, denied 2  hand-large-timestamps
+# allowed 3, denied 2  hand-near-zero
+# allowed 4, denied 3  hand-weighted-cost

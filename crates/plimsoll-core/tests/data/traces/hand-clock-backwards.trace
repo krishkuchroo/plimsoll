@@ -1,0 +1,9 @@
+# Clock goes backwards: the request is recorded at the newest entry's time,
+# so it cannot extend or reorder the window.
+window 1000
+limit 3
+10000 1
+9000 1    # recorded at 10000
+8000 1    # recorded at 10000
+10999 1   # denied: all three expire at 11000
+11000 1   # allowed

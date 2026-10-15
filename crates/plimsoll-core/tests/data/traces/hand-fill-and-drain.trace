@@ -1,0 +1,13 @@
+# Fill to the limit, get denied, then drain entry by entry at the exact expiry.
+window 1000
+limit 5
+100 1
+200 1
+300 1
+400 1
+500 1
+600 1     # denied: full
+1099 1    # denied: 100 expires at 1100, not before
+1100 1    # allowed: 100 expired exactly
+1199 1    # denied
+1200 1    # allowed

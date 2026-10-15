@@ -15,3 +15,13 @@ plimsoll-core = { workspace = true }
 redis = { workspace = true, features = ["tokio-comp", "connection-manager", "script"] }
 tokio = { workspace = true, features = ["time"] }
 thiserror = { workspace = true }
+
+[features]
+# Exposes `RedisStore::check_at`, which pins the script's clock. Tests only.
+test-clock = []
+
+[dev-dependencies]
+# Self-dependency so integration tests always get `check_at`.
+plimsoll-redis = { path = ".", features = ["test-clock"] }
+proptest = "1.11.0"
+tokio = { workspace = true, features = ["rt", "macros", "time"] }

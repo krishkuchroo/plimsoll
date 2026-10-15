@@ -1,0 +1,7 @@
+# hand-near-zero (window 1000, limit 2)
+0 1 -> A used=1 retry=- reset=1000
+0 1 -> A used=2 retry=- reset=1000
+0 1 -> D used=2 retry=1000 reset=1000
+999 1 -> D used=2 retry=1 reset=1
+1000 1 -> A used=1 retry=- reset=1000
+# allowed 3, denied 2

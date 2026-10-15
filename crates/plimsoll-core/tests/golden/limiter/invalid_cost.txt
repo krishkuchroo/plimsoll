@@ -1,0 +1,5 @@
+cost 0: err cost 0 is outside 1..=5
+cost 1: ok allowed=true
+cost 5: ok allowed=true
+cost 6: err cost 6 is outside 1..=5
+cost 18446744073709551615: err cost 18446744073709551615 is outside 1..=5

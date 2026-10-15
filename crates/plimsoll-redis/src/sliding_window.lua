@@ -6,6 +6,9 @@
 -- ARGV[1] = limit      max total cost per window
 -- ARGV[2] = window_us  window length in microseconds
 -- ARGV[3] = cost       cost of this request
+-- ARGV[4] = now_us     optional test clock. When present it replaces Redis
+--                      TIME and keys get no expiry (real-time TTLs would
+--                      fire mid-test). Only sent by the `test-clock` feature.
 --
 -- Returns {allowed, used, retry_after_us, reset_after_us}.
 --
@@ -18,9 +21,16 @@ local limit = tonumber(ARGV[1])
 local window = tonumber(ARGV[2])
 local cost = tonumber(ARGV[3])
 
--- 1. Clock: Redis TIME, clamped so it never runs behind the newest entry.
-local t = redis.call('TIME')
-local now = tonumber(t[1]) * 1000000 + tonumber(t[2])
+-- 1. Clock: Redis TIME (or the test clock), clamped so it never runs
+--    behind the newest entry.
+local test_clock = ARGV[4] ~= nil
+local now
+if test_clock then
+  now = tonumber(ARGV[4])
+else
+  local t = redis.call('TIME')
+  now = tonumber(t[1]) * 1000000 + tonumber(t[2])
+end
 local newest = redis.call('LINDEX', ts_key, -1)
 if newest and tonumber(newest) > now then
   now = tonumber(newest)
@@ -86,10 +96,14 @@ local oldest = redis.call('LINDEX', ts_key, 0)
 if oldest then
   reset_after = tonumber(oldest) + window - now
   if reset_after < 0 then reset_after = 0 end
-  local ttl_ms = math.ceil(window / 1000)
-  redis.call('SET', sum_key, string.format('%.0f', sum), 'PX', ttl_ms)
-  redis.call('PEXPIRE', ts_key, ttl_ms)
-  redis.call('PEXPIRE', cost_key, ttl_ms)
+  if test_clock then
+    redis.call('SET', sum_key, string.format('%.0f', sum))
+  else
+    local ttl_ms = math.ceil(window / 1000)
+    redis.call('SET', sum_key, string.format('%.0f', sum), 'PX', ttl_ms)
+    redis.call('PEXPIRE', ts_key, ttl_ms)
+    redis.call('PEXPIRE', cost_key, ttl_ms)
+  end
 else
   redis.call('DEL', ts_key, cost_key, sum_key)
 end

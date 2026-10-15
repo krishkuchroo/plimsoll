@@ -1,0 +1,7 @@
+# hand-clock-backwards (window 1000, limit 3)
+10000 1 -> A used=1 retry=- reset=1000
+9000 1 -> A used=2 retry=- reset=1000
+8000 1 -> A used=3 retry=- reset=1000
+10999 1 -> D used=3 retry=1 reset=1
+11000 1 -> A used=1 retry=- reset=1000
+# allowed 4, denied 1

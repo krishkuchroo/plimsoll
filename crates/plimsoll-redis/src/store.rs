@@ -144,7 +144,23 @@ impl RedisStore {
         ]
     }
 
-    async fn run(&self, request: CheckRequest<'_>) -> Result<CheckOutcome, StoreError> {
+    /// Run one check with the script's clock pinned to `now_us` instead of
+    /// Redis `TIME`, and with key expiry turned off. For deterministic tests
+    /// only: never use it in production, keys written this way never expire.
+    #[cfg(feature = "test-clock")]
+    pub async fn check_at(
+        &self,
+        request: CheckRequest<'_>,
+        now_us: u64,
+    ) -> Result<CheckOutcome, StoreError> {
+        self.run(request, Some(now_us)).await
+    }
+
+    async fn run(
+        &self,
+        request: CheckRequest<'_>,
+        now_us: Option<u64>,
+    ) -> Result<CheckOutcome, StoreError> {
         let [ts, cost, sum] = Self::keys(request.rule, request.key);
         let mut conn = self.conn.clone();
         let mut invocation = self.script.prepare_invoke();
@@ -155,6 +171,9 @@ impl RedisStore {
             .arg(request.limit)
             .arg(request.window_micros())
             .arg(request.cost);
+        if let Some(now) = now_us {
+            invocation.arg(now);
+        }
 
         let reply: (i64, i64, i64, i64) =
             tokio::time::timeout(self.timeout, invocation.invoke_async(&mut conn))
@@ -171,7 +190,7 @@ impl Store for RedisStore {
         &self,
         request: CheckRequest<'_>,
     ) -> impl Future<Output = Result<CheckOutcome, StoreError>> + Send {
-        self.run(request)
+        self.run(request, None)
     }
 }
 

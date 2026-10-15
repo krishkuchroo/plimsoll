@@ -1,0 +1,135 @@
+Unavailable("connection refused") Allow limit=10 instances=1: admitted 11/11
+    last: allowed=true degraded=true limit=10 remaining=9 retry_s=- err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=9;t=60
+Unavailable("connection refused") Allow limit=10 instances=2: admitted 11/11
+    last: allowed=true degraded=true limit=10 remaining=9 retry_s=- err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=9;t=60
+Unavailable("connection refused") Allow limit=10 instances=3: admitted 11/11
+    last: allowed=true degraded=true limit=10 remaining=9 retry_s=- err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=9;t=60
+Unavailable("connection refused") Allow limit=2 instances=5: admitted 3/3
+    last: allowed=true degraded=true limit=2 remaining=1 retry_s=- err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=2;w=60 | RateLimit: "api";r=1;t=60
+Unavailable("connection refused") Allow limit=1 instances=1: admitted 2/2
+    last: allowed=true degraded=true limit=1 remaining=0 retry_s=- err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60
+Unavailable("connection refused") Deny limit=10 instances=1: admitted 0/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Unavailable("connection refused") Deny limit=10 instances=2: admitted 0/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Unavailable("connection refused") Deny limit=10 instances=3: admitted 0/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Unavailable("connection refused") Deny limit=2 instances=5: admitted 0/3
+    last: allowed=false degraded=true limit=2 remaining=0 retry_s=60 err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=2;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Unavailable("connection refused") Deny limit=1 instances=1: admitted 0/2
+    last: allowed=false degraded=true limit=1 remaining=0 retry_s=60 err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Unavailable("connection refused") LocalFallback limit=10 instances=1: admitted 10/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Unavailable("connection refused") LocalFallback limit=10 instances=2: admitted 5/11
+    last: allowed=false degraded=true limit=5 remaining=0 retry_s=60 err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=5;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Unavailable("connection refused") LocalFallback limit=10 instances=3: admitted 4/11
+    last: allowed=false degraded=true limit=4 remaining=0 retry_s=60 err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=4;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Unavailable("connection refused") LocalFallback limit=2 instances=5: admitted 1/3
+    last: allowed=false degraded=true limit=1 remaining=0 retry_s=60 err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Unavailable("connection refused") LocalFallback limit=1 instances=1: admitted 1/2
+    last: allowed=false degraded=true limit=1 remaining=0 retry_s=60 err=store unavailable: connection refused
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Timeout(250ms) Allow limit=10 instances=1: admitted 11/11
+    last: allowed=true degraded=true limit=10 remaining=9 retry_s=- err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=9;t=60
+Timeout(250ms) Allow limit=10 instances=2: admitted 11/11
+    last: allowed=true degraded=true limit=10 remaining=9 retry_s=- err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=9;t=60
+Timeout(250ms) Allow limit=10 instances=3: admitted 11/11
+    last: allowed=true degraded=true limit=10 remaining=9 retry_s=- err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=9;t=60
+Timeout(250ms) Allow limit=2 instances=5: admitted 3/3
+    last: allowed=true degraded=true limit=2 remaining=1 retry_s=- err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=2;w=60 | RateLimit: "api";r=1;t=60
+Timeout(250ms) Allow limit=1 instances=1: admitted 2/2
+    last: allowed=true degraded=true limit=1 remaining=0 retry_s=- err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60
+Timeout(250ms) Deny limit=10 instances=1: admitted 0/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Timeout(250ms) Deny limit=10 instances=2: admitted 0/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Timeout(250ms) Deny limit=10 instances=3: admitted 0/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Timeout(250ms) Deny limit=2 instances=5: admitted 0/3
+    last: allowed=false degraded=true limit=2 remaining=0 retry_s=60 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=2;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Timeout(250ms) Deny limit=1 instances=1: admitted 0/2
+    last: allowed=false degraded=true limit=1 remaining=0 retry_s=60 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Timeout(250ms) LocalFallback limit=10 instances=1: admitted 10/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Timeout(250ms) LocalFallback limit=10 instances=2: admitted 5/11
+    last: allowed=false degraded=true limit=5 remaining=0 retry_s=60 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=5;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Timeout(250ms) LocalFallback limit=10 instances=3: admitted 4/11
+    last: allowed=false degraded=true limit=4 remaining=0 retry_s=60 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=4;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Timeout(250ms) LocalFallback limit=2 instances=5: admitted 1/3
+    last: allowed=false degraded=true limit=1 remaining=0 retry_s=60 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Timeout(250ms) LocalFallback limit=1 instances=1: admitted 1/2
+    last: allowed=false degraded=true limit=1 remaining=0 retry_s=60 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Protocol("bad reply") Allow limit=10 instances=1: admitted 11/11
+    last: allowed=true degraded=true limit=10 remaining=9 retry_s=- err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=9;t=60
+Protocol("bad reply") Allow limit=10 instances=2: admitted 11/11
+    last: allowed=true degraded=true limit=10 remaining=9 retry_s=- err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=9;t=60
+Protocol("bad reply") Allow limit=10 instances=3: admitted 11/11
+    last: allowed=true degraded=true limit=10 remaining=9 retry_s=- err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=9;t=60
+Protocol("bad reply") Allow limit=2 instances=5: admitted 3/3
+    last: allowed=true degraded=true limit=2 remaining=1 retry_s=- err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=2;w=60 | RateLimit: "api";r=1;t=60
+Protocol("bad reply") Allow limit=1 instances=1: admitted 2/2
+    last: allowed=true degraded=true limit=1 remaining=0 retry_s=- err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60
+Protocol("bad reply") Deny limit=10 instances=1: admitted 0/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Protocol("bad reply") Deny limit=10 instances=2: admitted 0/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Protocol("bad reply") Deny limit=10 instances=3: admitted 0/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Protocol("bad reply") Deny limit=2 instances=5: admitted 0/3
+    last: allowed=false degraded=true limit=2 remaining=0 retry_s=60 err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=2;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Protocol("bad reply") Deny limit=1 instances=1: admitted 0/2
+    last: allowed=false degraded=true limit=1 remaining=0 retry_s=60 err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Protocol("bad reply") LocalFallback limit=10 instances=1: admitted 10/11
+    last: allowed=false degraded=true limit=10 remaining=0 retry_s=60 err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Protocol("bad reply") LocalFallback limit=10 instances=2: admitted 5/11
+    last: allowed=false degraded=true limit=5 remaining=0 retry_s=60 err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=5;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Protocol("bad reply") LocalFallback limit=10 instances=3: admitted 4/11
+    last: allowed=false degraded=true limit=4 remaining=0 retry_s=60 err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=4;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Protocol("bad reply") LocalFallback limit=2 instances=5: admitted 1/3
+    last: allowed=false degraded=true limit=1 remaining=0 retry_s=60 err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+Protocol("bad reply") LocalFallback limit=1 instances=1: admitted 1/2
+    last: allowed=false degraded=true limit=1 remaining=0 retry_s=60 err=store returned an unexpected reply: bad reply
+    RateLimit-Policy: "api";q=1;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store

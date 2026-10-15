@@ -1,0 +1,10 @@
+# Realistic Unix-epoch microseconds, as Redis TIME returns. Lua must keep
+# these exact (string.format %.0f); this is the reference output to match.
+window 60000000
+limit 2
+1792000000000000 1
+1792000000000001 1
+1792000059999999 1    # denied
+1792000060000000 1    # allowed
+1792000060000001 1    # allowed
+1792000060000002 1    # denied
