@@ -39,8 +39,9 @@ What "done" looks like at 1.0:
 - [x] CI: fmt, clippy, rustdoc, tests against a Redis service, MSRV check (`.github/workflows/ci.yml`, 2026-10-16)
 - [x] MSRV corrected from 1.85 to 1.88: `redis` 1.7 requires 1.88, so 1.85 never built (found while adding the CI MSRV job)
 - [x] Benchmarks (criterion) + a load-test write-up: `BENCHMARKS.md`, 2026-10-16. Fixed O(n) Lua denials found by it (10x faster cost-1 denials at limit 10 000)
-- [ ] rustdoc for every public item, crate-level examples
-- [ ] CHANGELOG, CONTRIBUTING, issue templates
+- [x] rustdoc for every public item, crate-level examples (`missing_docs` warns, CI builds docs with `-D warnings`)
+- [x] CHANGELOG, CONTRIBUTING, issue and PR templates (2026-10-16)
+- [x] Docker Compose smoke test with membership and write-back (2026-10-16): 10/60s shared, instances #0/#1 discovered, 5+3 admitted during a Redis stop, written back on restart, total exactly 10
 - [ ] Publish `plimsoll-core`, `plimsoll-redis`, `plimsoll` 0.1.0
 
 ### Phase 3: Scale up
@@ -65,6 +66,7 @@ What "done" looks like at 1.0:
 - Sliding window log stores one entry per allowed request: ~13 bytes per entry plus ~300 bytes per active key (`BENCHMARKS.md`). Decided 2026-10-16: keep it as the exact algorithm and add a cheaper approximate one (sliding window counter / GCRA) in Phase 3.
 - A denial for a large cost walks the log (O(n) in the entries it needs to free); cost-1 denials read one batch.
 - `LocalFallback` state starts empty when Redis goes away, so an instance may admit its full share even if the global window was already full. Write-back (decision 7) makes Redis count those admissions afterwards, so later requests pay for them, but it can't undo them.
+- The first decision after recovery doesn't include the written-back admissions yet (write-back runs after that check), so its `remaining` is too high by up to one outage's worth. Enforcement is correct from the next request on.
 - Write-back records an admission no earlier than the newest entry already in Redis, so it may expire slightly late. That only makes the limit stricter.
 - Redis without persistence loses every window on restart. Decided 2026-10-16: document it and recommend AOF or replication; no detection in the library.
 - A clock going backwards is clamped to the newest entry, which can stretch a window slightly. Decided 2026-10-16: leave as is; Redis `TIME` rarely jumps.

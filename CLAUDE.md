@@ -15,7 +15,7 @@ Reference material lives in `docs-pdf/`:
 
 ## Current status (2026-10-16)
 
-**Phase 1 (MVP) is done; Phase 2 (release-ready) is in progress:** tests and CI are in place. Nothing is published to crates.io yet.
+**Phase 1 (MVP) is done; Phase 2 (release-ready) is done except publishing:** tests, CI, benchmarks, CHANGELOG/CONTRIBUTING are in place. Nothing is published to crates.io yet; publishing needs the user's explicit go-ahead.
 
 - All three crates build; `clippy -D warnings`, `fmt` and rustdoc are clean.
 - `docker compose up --build` smoke test passed: 10/60s shared across both instances, 429 + headers, 5-per-instance fallback with Redis stopped, recovery on restart.
