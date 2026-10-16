@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::{
@@ -14,7 +15,9 @@ use crate::{
 pub struct Limiter<S> {
     store: S,
     local: LocalStore,
-    instances: u32,
+    /// Instance count (high 32 bits) and this instance's index (low 32
+    /// bits), packed so both always change together.
+    membership: AtomicU64,
     on_store_error: OnStoreError,
     deny_retry_after: Duration,
     observer: Option<Arc<dyn Observer>>,
@@ -28,7 +31,10 @@ impl<S: std::fmt::Debug> std::fmt::Debug for Limiter<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Limiter")
             .field("store", &self.store)
-            .field("instances", &self.instances)
+            .field(
+                "membership",
+                &unpack(self.membership.load(Ordering::Relaxed)),
+            )
             .field("on_store_error", &self.on_store_error)
             .field("deny_retry_after", &self.deny_retry_after)
             .field("observer", &self.observer.is_some())
@@ -42,6 +48,7 @@ impl<S: Store> Limiter<S> {
         LimiterBuilder {
             store,
             instances: 1,
+            instance_index: 0,
             on_store_error: OnStoreError::default(),
             deny_retry_after: DEFAULT_DENY_RETRY_AFTER,
             observer: None,
@@ -65,7 +72,21 @@ impl<S: Store> Limiter<S> {
 
     /// Number of instances this limiter assumes share each rule.
     pub fn instances(&self) -> u32 {
-        self.instances
+        unpack(self.membership.load(Ordering::Relaxed)).0
+    }
+
+    /// This instance's position among them, from `0` to `instances() - 1`.
+    pub fn instance_index(&self) -> u32 {
+        unpack(self.membership.load(Ordering::Relaxed)).1
+    }
+
+    /// Update the instance count and this instance's index while running,
+    /// for example from a membership heartbeat. A count below 1 is treated
+    /// as 1 and the index is clamped to `instances - 1`. Only affects
+    /// [`OnStoreError::LocalFallback`] shares.
+    pub fn set_membership(&self, instances: u32, index: u32) {
+        self.membership
+            .store(pack(instances, index), Ordering::Relaxed);
     }
 
     /// Check a request of cost 1 for `key` under `rule`.
@@ -155,7 +176,24 @@ impl<S: Store> Limiter<S> {
                 store_error: None,
             },
             OnStoreError::LocalFallback => {
-                let share = local_share(request.limit, self.instances);
+                let (instances, index) = unpack(self.membership.load(Ordering::Relaxed));
+                let share = local_share(request.limit, instances, index);
+                if share == 0 {
+                    // This instance's share of a small limit is nothing:
+                    // other instances hold the whole limit while degraded.
+                    return Decision {
+                        allowed: false,
+                        rule: rule.name_arc(),
+                        limit: 0,
+                        cost: request.cost,
+                        window: request.window,
+                        remaining: 0,
+                        retry_after: Some(self.deny_retry_after.min(request.window)),
+                        reset_after: request.window,
+                        degraded: true,
+                        store_error: Some(err),
+                    };
+                }
                 let local_request = CheckRequest {
                     limit: share,
                     cost: request.cost.min(share),
@@ -178,18 +216,34 @@ impl<S: Store> Limiter<S> {
     }
 }
 
-/// This instance's share of a global limit: `ceil(limit / instances)`, so a
-/// limit smaller than the instance count still admits one request per
-/// instance rather than none.
-fn local_share(limit: u64, instances: u32) -> u64 {
+/// This instance's share of a global limit. The limit is split exactly:
+/// every instance gets `floor(limit / instances)`, and the instances with
+/// index below `limit % instances` get one more, so the shares add up to
+/// `limit` when every instance has a distinct index. An instance whose share
+/// is 0 admits nothing while degraded.
+///
+/// With the default index of 0 on every instance this is `ceil(limit / n)`
+/// each, which can overshoot by up to `n - 1` in total.
+pub(crate) fn local_share(limit: u64, instances: u32, index: u32) -> u64 {
     let n = u64::from(instances.max(1));
-    limit.div_ceil(n).max(1)
+    let index = u64::from(index).min(n - 1);
+    limit / n + u64::from(index < limit % n)
+}
+
+fn pack(instances: u32, index: u32) -> u64 {
+    let instances = instances.max(1);
+    (u64::from(instances) << 32) | u64::from(index.min(instances - 1))
+}
+
+fn unpack(packed: u64) -> (u32, u32) {
+    ((packed >> 32) as u32, packed as u32)
 }
 
 /// Builder for [`Limiter`]. Created by [`Limiter::builder`].
 pub struct LimiterBuilder<S> {
     store: S,
     instances: u32,
+    instance_index: u32,
     on_store_error: OnStoreError,
     deny_retry_after: Duration,
     observer: Option<Arc<dyn Observer>>,
@@ -200,6 +254,7 @@ impl<S: std::fmt::Debug> std::fmt::Debug for LimiterBuilder<S> {
         f.debug_struct("LimiterBuilder")
             .field("store", &self.store)
             .field("instances", &self.instances)
+            .field("instance_index", &self.instance_index)
             .field("on_store_error", &self.on_store_error)
             .field("deny_retry_after", &self.deny_retry_after)
             .field("observer", &self.observer.is_some())
@@ -213,6 +268,17 @@ impl<S: Store> LimiterBuilder<S> {
     /// below 1 are treated as 1.
     pub fn instances(mut self, instances: u32) -> Self {
         self.instances = instances.max(1);
+        self
+    }
+
+    /// This instance's position among the instances, `0..instances`. Give
+    /// every instance a distinct index and the `LocalFallback` shares add
+    /// up to exactly the rule's limit; leave it at the default `0` on all of
+    /// them and each gets `ceil(limit / instances)`. With Redis, a
+    /// membership heartbeat (`plimsoll_redis::Membership`) can set both
+    /// values automatically.
+    pub fn instance_index(mut self, index: u32) -> Self {
+        self.instance_index = index;
         self
     }
 
@@ -245,7 +311,7 @@ impl<S: Store> LimiterBuilder<S> {
         Limiter {
             store: self.store,
             local: LocalStore::new(),
-            instances: self.instances,
+            membership: AtomicU64::new(pack(self.instances, self.instance_index)),
             on_store_error: self.on_store_error,
             deny_retry_after: self.deny_retry_after,
             observer: self.observer,

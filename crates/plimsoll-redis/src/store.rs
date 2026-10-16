@@ -159,6 +159,11 @@ impl RedisStore {
         Ok(self)
     }
 
+    /// A handle to the shared connection.
+    pub(crate) fn connection(&self) -> ConnectionManager {
+        self.conn.clone()
+    }
+
     /// The key prefix in use.
     pub fn prefix(&self) -> &str {
         &self.prefix
@@ -276,7 +281,7 @@ fn validate_prefix(prefix: &str) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn map_error(err: RedisError) -> StoreError {
+pub(crate) fn map_error(err: RedisError) -> StoreError {
     if err.is_timeout() {
         StoreError::Timeout(Duration::ZERO)
     } else if err.is_io_error() || err.is_connection_refusal() || err.is_connection_dropped() {

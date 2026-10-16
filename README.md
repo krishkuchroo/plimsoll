@@ -77,7 +77,7 @@ Pick a policy per rule with `.on_store_error(...)`:
 
 | Policy | What happens | Good for |
 |---|---|---|
-| `LocalFallback` (default) | Each server enforces its share, `ceil(limit / instances)`, in memory | Most APIs |
+| `LocalFallback` (default) | Each server enforces its share of the limit in memory; the shares add up to exactly the limit | Most APIs |
 | `Allow` | Let everything through | Limits that only protect capacity |
 | `Deny` | Reject everything, with a short `Retry-After` (5 s by default, `deny_retry_after` to change) | Login, password reset, anything abuse-sensitive |
 
@@ -91,7 +91,21 @@ let login = Rule::builder("login")
     .build()?;
 ```
 
-`instances(n)` on the limiter tells `LocalFallback` how many servers share the limit. Every degraded answer has `degraded = true` and `store_error` set.
+`LocalFallback` needs to know how many servers share the limit and which one this is. Let them find each other through Redis:
+
+```rust
+use plimsoll::redis::Membership;
+use std::sync::Arc;
+
+let limiter = Arc::new(Limiter::new(store));
+let membership = Membership::new(limiter.store(), "web-1"); // unique per server, e.g. the pod name
+membership.clone().spawn(Arc::clone(&limiter), Duration::from_secs(5));
+// on shutdown: membership.leave().await
+```
+
+Each server heartbeats every 5 s; one that stops is dropped after 15 s. The limit is then split exactly: with 10 over 3 servers they get 4, 3 and 3. While Redis is down the heartbeat can't run, so servers keep the last membership they saw, which is what the fallback needs. Without `Membership`, set `.instances(n)` and `.instance_index(i)` on the builder yourself.
+
+Every degraded answer has `degraded = true` and `store_error` set.
 
 ## Several apps, one Redis
 

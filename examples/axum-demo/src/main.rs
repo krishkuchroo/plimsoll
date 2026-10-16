@@ -7,7 +7,7 @@
 //! | `REDIS_URL` | `redis://127.0.0.1/` | Redis connection URL |
 //! | `PORT` | `3000` | listen port |
 //! | `INSTANCE_NAME` | `instance` | reported in responses and logs |
-//! | `INSTANCES` | `2` | how many instances share the limit (sizes the local fallback) |
+//! | `INSTANCES` | `2` | starting guess for how many instances share the limit; replaced by the live count from the Redis membership heartbeat |
 //! | `RATE_LIMIT` | `10` | requests per window |
 //! | `RATE_WINDOW_SECS` | `60` | window length |
 //!
@@ -24,7 +24,7 @@ use axum::extract::State;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use plimsoll::redis::{RedisConfig, RedisStore};
+use plimsoll::redis::{Membership, RedisConfig, RedisStore};
 use plimsoll::{Decision, Limiter, Metrics, Rule};
 use serde_json::json;
 use tracing_subscriber::EnvFilter;
@@ -66,8 +66,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .observer(Arc::clone(&metrics))
         .build();
 
+    // Instances find each other through Redis every 5 s, so the fallback
+    // splits the limit exactly (by instance index) without hand-tuned config.
+    let limiter = Arc::new(limiter);
+    let membership = Membership::new(limiter.store(), &*instance);
+    membership
+        .clone()
+        .spawn(Arc::clone(&limiter), Duration::from_secs(5));
+
     let state = AppState {
-        limiter: Arc::new(limiter),
+        limiter: Arc::clone(&limiter),
         metrics,
         rule,
         instance: Arc::clone(&instance),
@@ -84,6 +92,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
+    // Tell the other instances right away instead of waiting for the TTL.
+    let _ = membership.leave().await;
     Ok(())
 }
 
@@ -117,6 +127,8 @@ async fn index(State(state): State<AppState>, headers: HeaderMap) -> Response {
         "allowed": decision.allowed,
         "limit": decision.limit,
         "remaining": decision.remaining,
+        "instances": state.limiter.instances(),
+        "instance_index": state.limiter.instance_index(),
         "reset_after_secs": decision.reset_after.as_secs_f64(),
         "retry_after_secs": decision.retry_after_secs(),
         "degraded": decision.degraded,

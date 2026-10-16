@@ -49,7 +49,7 @@ Do not change these without asking the user.
 | Atomicity | All read-evict-check-insert logic runs in one Lua script (EVALSHA via `redis::Script`) |
 | Keys | `{<prefix>:<rule>:<key>}:ts` (prefix from `RedisConfig`, default `plimsoll`), `:cost`, `:sum` — shared hash tag so they stay on one slot (Redis Cluster-ready). Keys expire after one window |
 | Denied requests | Not counted toward the limit |
-| Store failure | `OnStoreError::{Allow, Deny, LocalFallback}`; per-rule override, global default `LocalFallback` (in-process limit = `limit / instances`). `Decision.degraded = true` when a fallback was used |
+| Store failure | `OnStoreError::{Allow, Deny, LocalFallback}`; per-rule override, global default `LocalFallback` (in-process share: `floor(limit / N)` + 1 for indexes below `limit % N`; N and index from `plimsoll_redis::Membership` or set by hand). `Decision.degraded = true` when a fallback was used |
 | Rules | Builder API in code (`Rule::builder`). Config files are a later phase |
 | API | Framework-agnostic. `check(rule, key)` / `check_cost(rule, key, cost)` → `Decision { allowed, limit, remaining, retry_after, reset_after, degraded, .. }` + `Decision::headers()` |
 | HTTP semantics | RFC 6585 §4: 429, `Retry-After`, `Cache-Control: no-store` on denial; IETF `RateLimit` / `RateLimit-Policy` headers. The app writes the body |

@@ -57,7 +57,7 @@ What "done" looks like at 1.0:
 ### Phase 4: Beyond a central store
 - [ ] Hybrid mode: local counters with periodic sync to Redis (Databricks-style batch reporting)
 - [ ] Peer-to-peer mode: gossip-based global estimates, FPS-style proportional allocation (SIGCOMM '07)
-- [ ] Membership-aware `1/N` degradation when peers disappear
+- [x] Membership-aware `1/N` degradation when peers disappear (`Membership`, 2026-10-16)
 - [ ] Multi-region deployments
 
 ## Known limitations
@@ -77,9 +77,9 @@ What "done" looks like at 1.0:
 | 3 | Default timeout | 100 ms (was 250 ms); 1 s connect, one reconnect attempt | done |
 | 4 | Legacy `X-RateLimit-*` headers | **open**, awaiting the user's choice; IETF headers only for now | open |
 | 5 | `Retry-After` under `Deny` was the full window | `LimiterBuilder::deny_retry_after`, default 5 s, capped at the window | done |
-| 6 | `ceil(limit / N)` share overshoots by up to N-1 | exact split: `floor(limit / N)`, plus one for the first `limit % N` instances by index | in progress |
+| 6 | `ceil(limit / N)` share overshoots by up to N-1 | exact split: `floor(limit / N)`, plus one for the first `limit % N` instances by index (`LimiterBuilder::instance_index`, `Limiter::set_membership`); default index 0 keeps the old `ceil` behaviour | done |
 | 7 | Fallback admissions never reach Redis | write them back to Redis once it recovers | planned |
-| 8 | Instance count set by hand | instances register in Redis with a TTL; count and index are discovered | planned |
+| 8 | Instance count set by hand | `plimsoll_redis::Membership`: instances heartbeat into a Redis sorted set with a TTL (default 15 s) and get the live count and their index; `spawn` keeps the limiter updated; the demo uses it | done |
 | 9 | Redis restart without persistence resets limits | document; recommend AOF/replication | done (docs) |
 | 10 | Memory per entry | keep; add approximate algorithm in Phase 3 | done (docs) |
 | 11 | Clock going backwards | leave as is | done (docs) |

@@ -34,8 +34,10 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod membership;
 mod store;
 
+pub use membership::{DEFAULT_MEMBERSHIP_TTL, Members, Membership};
 pub use store::{DEFAULT_PREFIX, RedisConfig, RedisStore};
 
 /// Re-export of the `redis` crate this store is built on, so callers can

@@ -1,0 +1,12 @@
+limit 10 over 3: shares [4, 3, 3] total 10
+limit 10 over 4: shares [3, 3, 2, 2] total 10
+limit 2 over 5: shares [1, 1, 0, 0, 0] total 2
+limit 7 over 7: shares [1, 1, 1, 1, 1, 1, 1] total 7
+limit 1 over 3: shares [1, 0, 0] total 1
+limit 100 over 1: shares [100] total 100
+builder 4/#3 -> 4/#3
+set 2/#1 -> 2/#1
+set 0/#9 -> 1/#0 (clamped)
+zero share
+    allowed=false degraded=true limit=0 remaining=0 retry_s=5 err=store unavailable: down
+    RateLimit-Policy: "api";q=0;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 5 | Cache-Control: no-store

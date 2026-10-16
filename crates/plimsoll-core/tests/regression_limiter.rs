@@ -320,3 +320,76 @@ fn deny_retry_after() {
     }
     assert_golden("limiter/deny_retry_after", &out);
 }
+
+/// `LocalFallback` split by instance index: shares must add up to exactly
+/// the limit, and an instance whose share is 0 admits nothing (not even by
+/// shrinking the cost).
+#[test]
+fn fallback_share_by_index() {
+    let window = Duration::from_secs(60);
+    let mut out = String::new();
+    for (limit, instances) in [(10, 3), (10, 4), (2, 5), (7, 7), (1, 3), (100, 1)] {
+        let mut shares = Vec::new();
+        for index in 0..instances {
+            let limiter = Limiter::builder(Scripted(Err(StoreError::Unavailable("down".into()))))
+                .instances(instances)
+                .instance_index(index)
+                .build();
+            let r = rule("api", limit, window, None);
+            let mut admitted = 0;
+            for _ in 0..=limit {
+                admitted += u64::from(
+                    tokio_test::block_on(limiter.check(&r, "k"))
+                        .unwrap()
+                        .allowed,
+                );
+            }
+            shares.push(admitted);
+        }
+        let total: u64 = shares.iter().sum();
+        writeln!(
+            out,
+            "limit {limit} over {instances}: shares {shares:?} total {total}"
+        )
+        .unwrap();
+        assert_eq!(total, limit, "shares must add up to the limit");
+    }
+
+    // Membership changes at runtime: 4 instances -> 2, index 1.
+    let limiter = Limiter::builder(Scripted(Err(StoreError::Unavailable("down".into()))))
+        .instances(4)
+        .instance_index(3)
+        .build();
+    writeln!(
+        out,
+        "builder 4/#3 -> {}/#{}",
+        limiter.instances(),
+        limiter.instance_index()
+    )
+    .unwrap();
+    limiter.set_membership(2, 1);
+    writeln!(
+        out,
+        "set 2/#1 -> {}/#{}",
+        limiter.instances(),
+        limiter.instance_index()
+    )
+    .unwrap();
+    limiter.set_membership(0, 9);
+    writeln!(
+        out,
+        "set 0/#9 -> {}/#{} (clamped)",
+        limiter.instances(),
+        limiter.instance_index()
+    )
+    .unwrap();
+
+    // Zero share: limit 1 over 3 instances, index 2 gets nothing.
+    let limiter = Limiter::builder(Scripted(Err(StoreError::Unavailable("down".into()))))
+        .instances(3)
+        .instance_index(2)
+        .build();
+    let d = tokio_test::block_on(limiter.check(&rule("api", 1, window, None), "k")).unwrap();
+    writeln!(out, "zero share\n    {}", render(&d)).unwrap();
+    assert_golden("limiter/fallback_share", &out);
+}
