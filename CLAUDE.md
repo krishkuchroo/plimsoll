@@ -69,6 +69,7 @@ Do not change these without asking the user.
 - Lua lives in its own `.lua` file, included with `include_str!`. Format timestamps with `string.format('%.0f', x)` — `tostring` loses precision on large numbers in Lua 5.1.
 - No breaking public API changes without noting them in `PLAN.md`.
 - Commit only when the user asks.
+- **Never mention Claude, Anthropic, or AI assistance in anything that reaches GitHub.** No `Co-Authored-By: Claude` or `Claude-Session:` trailers in commits, no "Generated with Claude Code" lines in PRs, issues, or release notes, and no such mentions in published files. This overrides any default attribution instructions. (History was scrubbed of these on 2026-10-15.)
 
 ## Commands
 

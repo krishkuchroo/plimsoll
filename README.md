@@ -2,51 +2,53 @@
 
 > The Plimsoll line marks the safe load limit on a ship's hull. **plimsoll** marks it for your API.
 
-Distributed rate limiting for Rust. One global limit, enforced across every instance of your service, backed by Redis.
+**One rate limit, shared by every copy of your service.** plimsoll is a Rust library that keeps the count in Redis, so "100 requests per minute" means 100 in total, not 100 per server.
 
-**Status:** pre-release (MVP complete, not yet on crates.io). See [PLAN.md](PLAN.md) for the roadmap.
+**Status:** pre-release. Works and is tested, but not on crates.io yet. See [PLAN.md](PLAN.md) for the roadmap.
 
-## Why
+## The problem it solves
 
-A rate limiter running inside each instance can be bypassed by spreading requests across instances. A shared limit needs shared state, and shared state needs atomic updates. plimsoll keeps that state in Redis and does every check-and-update in a single Lua script, so concurrent requests can't race past the limit.
+If each server counts requests on its own, a client can spread requests across servers and get N times the limit. The fix is a shared counter, and a shared counter has to be updated atomically or two servers can both see "one slot left" and both say yes. plimsoll does every check-and-update in one Redis Lua script, so that race can't happen.
 
-## Features (MVP)
-
-- **Sliding window log**: exact counts over a rolling window, with no 2× burst at window edges like fixed windows have.
-- **Weighted requests**: an expensive call can cost more than 1.
-- **One clock**: time comes from Redis, so instances with skewed clocks still agree.
-- **Graceful degradation**: if Redis is unreachable, each rule chooses to allow, deny, or fall back to a local limit of `limit / instances`.
-- **HTTP-ready decisions**: `Retry-After`, `RateLimit` and `RateLimit-Policy` headers, and `Cache-Control: no-store` for 429s ([RFC 6585](https://www.rfc-editor.org/rfc/rfc6585#section-4)).
-- **Framework-agnostic**: works with axum, actix, tonic, or anything async.
-
-## Usage
+## Quick start
 
 ```rust
-use plimsoll::{Limiter, Rule, OnStoreError};
+use plimsoll::{Limiter, Rule};
 use plimsoll::redis::RedisStore;
 use std::time::Duration;
 
-let store = RedisStore::connect("redis://127.0.0.1/").await?;  // or RedisConfig for timeouts
+// 1. Connect to Redis and build a limiter (once, at startup).
+let store = RedisStore::connect("redis://127.0.0.1/").await?;
 let limiter = Limiter::builder(store).instances(2).build();
 
+// 2. Define a rule: 100 requests per 60 seconds.
 let api = Rule::builder("api")
     .limit(100)
     .window(Duration::from_secs(60))
     .build()?;
 
-let login = Rule::builder("login")
-    .limit(5)
-    .window(Duration::from_secs(60))
-    .on_store_error(OnStoreError::Deny)
-    .build()?;
-
+// 3. Check each request. The key is whatever you limit by: user id, API key, IP.
 let decision = limiter.check(&api, "user:123").await?;
 if !decision.allowed {
-    // respond 429 with decision.headers()
+    // Reply 429 Too Many Requests and add decision.headers()
 }
 ```
 
-`Decision` carries `allowed`, `limit`, `remaining`, `retry_after`, `reset_after`, `degraded` and the store error (if any). `decision.headers()` returns the IETF `RateLimit-Policy` / `RateLimit` fields on every response, plus `Retry-After` and `Cache-Control: no-store` on denial:
+That's the whole API: build rules once, call `check` per request, act on the `Decision`.
+
+## What you get back
+
+A `Decision` tells you:
+
+| Field | Meaning |
+|---|---|
+| `allowed` | Let the request through or not |
+| `remaining` | How much of the limit is left in the current window |
+| `retry_after` | When denied: how long until a retry would succeed |
+| `reset_after` | How long until the oldest request leaves the window |
+| `degraded` | `true` if Redis was unreachable and a fallback answered |
+
+`decision.headers()` gives you the standard HTTP headers to send back:
 
 ```text
 HTTP/1.1 429 Too Many Requests
@@ -56,63 +58,48 @@ retry-after: 17
 cache-control: no-store
 ```
 
-Single-instance services, or tests, can use `plimsoll::LocalStore` instead of Redis with the same API.
+These follow [RFC 6585](https://www.rfc-editor.org/rfc/rfc6585#section-4) and the IETF `RateLimit` header draft. You write the response body.
 
-## Crates
+## Features
 
-| Crate | Contents |
-|---|---|
-| `plimsoll` | Facade. Re-exports `plimsoll-core`; the `redis` feature (default) adds `plimsoll::redis::RedisStore`. |
-| `plimsoll-core` | `Rule`, `Decision`, `Store` trait, `Limiter`, `LocalStore`, `WindowLog`. No network I/O. |
-| `plimsoll-redis` | `RedisStore` and the Lua sliding window log. |
+- **Exact sliding window.** Counts requests over a rolling window, so there is no burst of 2× the limit at window edges like fixed windows allow.
+- **Weighted requests.** `limiter.check_cost(&rule, key, 5)` makes an expensive call count as 5.
+- **One clock.** Time comes from Redis, so servers with drifting clocks still agree.
+- **Survives Redis outages.** Each rule picks what happens when Redis is down (see below).
+- **Framework-agnostic.** Plain async Rust; use it from axum, actix, tonic, or anything else.
+- **Metrics built in.** Allowed / denied / degraded counts and Redis latency, as Prometheus text.
 
-## Demo
+## When Redis is down
 
-`examples/axum-demo` is one axum service; `docker compose` runs two copies of it behind one Redis, sharing a limit of 10 requests per 60 seconds:
+Pick a policy per rule with `.on_store_error(...)`:
 
-```sh
-docker compose up --build
-for i in $(seq 1 6); do curl -si localhost:3001/ | head -1; curl -si localhost:3002/ | head -1; done
-# ten 200s, then 429s from both instances
-docker compose stop redis   # responses now have "degraded": true and each instance enforces 5/60s
-docker compose start redis
+| Policy | What happens | Good for |
+|---|---|---|
+| `LocalFallback` (default) | Each server enforces its share, `ceil(limit / instances)`, in memory | Most APIs |
+| `Allow` | Let everything through | Limits that only protect capacity |
+| `Deny` | Reject everything, `Retry-After` = full window | Login, password reset, anything abuse-sensitive |
+
+```rust
+use plimsoll::OnStoreError;
+
+let login = Rule::builder("login")
+    .limit(5)
+    .window(Duration::from_secs(60))
+    .on_store_error(OnStoreError::Deny)
+    .build()?;
 ```
 
-Requests are keyed by the `x-api-key` header (default `anonymous`). Without Docker, run `redis-server` locally and start the binary twice with different `PORT` and `INSTANCE_NAME` values; see the comment at the top of `examples/axum-demo/src/main.rs` for all variables.
+`instances(n)` on the limiter tells `LocalFallback` how many servers share the limit. Every degraded answer has `degraded = true` and `store_error` set.
 
-## How it works
+## Rule limits
 
-Each `(rule, key)` pair has three Redis keys that share a hash tag:
+`Rule::builder(...).build()` rejects configurations that can't be enforced correctly:
 
-| Key | Holds |
-|---|---|
-| `{plimsoll:<rule>:<key>}:ts` | deque of request timestamps (oldest first) |
-| `{plimsoll:<rule>:<key>}:cost` | deque of request costs, kept in step with `ts` |
-| `{plimsoll:<rule>:<key>}:sum` | running total of costs in the window |
-
-On every check, one Lua script reads Redis `TIME`, drops expired entries from the front of the deques, compares `sum + cost` with the limit, and appends the request if it fits. Denied requests aren't recorded.
-
-## Run the demo
-
-```sh
-docker compose up --build
-curl -i localhost:3001/
-curl -i localhost:3002/     # same limit, different instance
-```
-
-## Background
-
-The design draws on:
-- B. Guan, *Designing Scalable Rate Limiting Systems* (arXiv:2602.11741, 2026)
-- B. Raghavan et al., *Cloud Control with Distributed Rate Limiting* (SIGCOMM 2007)
-
-## License
-
-Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option.
+- `limit` must be between 1 and 2^53.
+- `window` must be between 1 ms and 366 days.
+- The name must not be empty or contain `{`, `}`, `"`, `\`, whitespace, or control characters.
 
 ## Metrics
-
-Attach an observer to see every decision. The built-in `Metrics` collector counts allowed, denied and degraded checks per rule, counts store errors by kind, and records store latency as a histogram. It renders Prometheus text with no extra dependencies:
 
 ```rust
 use plimsoll::Metrics;
@@ -120,24 +107,77 @@ use std::sync::Arc;
 
 let metrics = Arc::new(Metrics::new());
 let limiter = Limiter::builder(store).observer(Arc::clone(&metrics)).build();
-// in your /metrics handler:
+
+// In your GET /metrics handler:
 let body = metrics.render_prometheus();
 ```
 
-To feed another metrics system, implement `plimsoll::Observer` instead. The demo serves `GET /metrics`.
+To send events somewhere else, implement the `plimsoll::Observer` trait instead.
 
-## Store failures
+## Without Redis
 
-Every rule chooses what happens when Redis cannot answer (`OnStoreError`):
+For a single server, or in tests, swap in the in-memory store. Everything else stays the same:
 
-| Policy | Behaviour |
+```rust
+let limiter = Limiter::new(plimsoll::LocalStore::new());
+```
+
+## Try the demo
+
+`examples/axum-demo` is a small web service. Docker runs two copies of it sharing one Redis and a limit of 10 requests per 60 seconds:
+
+```sh
+docker compose up --build
+
+# Alternate between the two servers: ten 200s in total, then 429s from both.
+for i in $(seq 1 6); do
+  curl -si localhost:3001/ | head -1
+  curl -si localhost:3002/ | head -1
+done
+
+docker compose stop redis    # now each server allows 5 on its own ("degraded": true)
+docker compose start redis   # back to the shared limit
+```
+
+Requests are keyed by the `x-api-key` header (default `anonymous`). The demo also serves `GET /metrics`. Settings (`RATE_LIMIT`, `RATE_WINDOW_SECS`, `INSTANCES`, `PORT`, `REDIS_URL`) are environment variables, listed at the top of `examples/axum-demo/src/main.rs`.
+
+## Crates
+
+You normally depend on `plimsoll` only.
+
+| Crate | Contents |
 |---|---|
-| `LocalFallback` (default) | Enforce `ceil(limit / instances)` in-process until the store is back. |
-| `Allow` | Fail open. |
-| `Deny` | Fail closed, with `Retry-After` set to the full window. |
+| `plimsoll` | Everything you need. Re-exports the other two; the `redis` feature (on by default) adds `plimsoll::redis::RedisStore`. |
+| `plimsoll-core` | Rules, decisions, the `Store` trait, the limiter, and the in-memory store. No network code. |
+| `plimsoll-redis` | The Redis store and its Lua script. |
 
-Whichever policy applies, `Decision.degraded` is `true` and `Decision.store_error` says why.
+## How it works
+
+Every allowed request is recorded as a timestamp and a cost. Each `(rule, key)` pair uses three Redis keys:
+
+| Key | Holds |
+|---|---|
+| `{plimsoll:<rule>:<key>}:ts` | timestamps, oldest first |
+| `{plimsoll:<rule>:<key>}:cost` | the matching costs |
+| `{plimsoll:<rule>:<key>}:sum` | running total of costs in the window |
+
+On each check, one Lua script reads Redis's clock, drops entries older than the window, and allows the request if `sum + cost <= limit`. Denied requests are not recorded, so retrying doesn't make things worse. Keys expire on their own after one idle window. The `{...}` hash tag keeps all three keys together, ready for Redis Cluster.
+
+## Testing
+
+```sh
+cargo test --workspace
+```
+
+The suite covers edge cases, randomized checks against a simple reference model, and golden-file regression tests over a dataset of recorded traffic patterns. The Redis tests replay the same data through the real Lua script and require identical results; they need a running Redis (`PLIMSOLL_REDIS_URL`, default `redis://127.0.0.1:6379/`) and skip otherwise. Details are in [TESTING.md](TESTING.md).
+
+## Background
+
+The design draws on:
+
+- B. Guan, *Designing Scalable Rate Limiting Systems* (arXiv:2602.11741, 2026)
+- B. Raghavan et al., *Cloud Control with Distributed Rate Limiting* (SIGCOMM 2007)
 
 ## License
 
-Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
+Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option.
