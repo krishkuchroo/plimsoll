@@ -75,7 +75,7 @@ impl LocalStore {
 
         let mut inner = self.lock();
         inner.checks = inner.checks.wrapping_add(1);
-        if inner.checks % SWEEP_EVERY == 0 {
+        if inner.checks.is_multiple_of(SWEEP_EVERY) {
             inner.sweep(now);
         }
         let entry = inner.logs.entry(id).or_insert_with(|| Entry {

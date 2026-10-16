@@ -119,7 +119,7 @@ fn healthy_store_decisions() {
         ),
         (
             "rule name with colon",
-            rule("v1:login", 5, w60, None),
+            rule("v1.login", 5, w60, None),
             ok(true, 1, None, 60_000),
         ),
         (
@@ -237,6 +237,7 @@ fn rule_validation() {
         ("   ", Some(1), Some(Duration::from_secs(1))),
         ("has space", Some(1), Some(Duration::from_secs(1))),
         ("{tag}", Some(1), Some(Duration::from_secs(1))),
+        ("v1:login", Some(1), Some(Duration::from_secs(1))),
         ("tab\there", Some(1), Some(Duration::from_secs(1))),
         ("nul\0", Some(1), Some(Duration::from_secs(1))),
         ("api", Some(0), Some(Duration::from_secs(1))),

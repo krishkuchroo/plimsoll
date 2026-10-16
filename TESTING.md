@@ -27,7 +27,7 @@ hard-coding expected numbers where possible.
 |---|---|---|---|---|
 | 1 | Edge-case unit tests + property test of `WindowLog` vs a brute-force model | `crates/plimsoll-core/tests/window_log.rs` | nothing | done; found and fixed the t = 0 eviction bug (2026-10-15) |
 | 2 | Redis vs `WindowLog` differential test: same traces + 64 random sequences, plus real-clock TTL check and odd keys | `crates/plimsoll-redis/tests/differential.rs` | local Redis | done 2026-10-15; verified it catches an injected off-by-one in the Lua eviction |
-| 3 | Concurrency: many tasks, one key, both stores; check invariant 1 | `crates/plimsoll-redis/tests/` | local Redis | todo |
+| 3 | Concurrency: 4 Redis connections x 8 threads (exact count, serialised `used` 1..=N, weighted costs, 50 isolated keys); `LocalStore` and `LocalFallback` share under 8 OS threads | `crates/plimsoll-redis/tests/concurrency.rs`, `crates/plimsoll-core/tests/concurrency.rs` | local Redis | done 2026-10-16 |
 | 4 | Faults: Toxiproxy between demo and Redis (latency, resets, timeout edge, `SCRIPT FLUSH`, restart); check invariant 5 and recovery | `docker-compose.test.yml` | Docker | todo |
 | 5 | Load: `oha`/`k6` against both demo instances, p50/p99 latency, Redis memory per key | `bench/` | Docker | todo |
 
@@ -56,10 +56,9 @@ Fixed 2026-10-15 (in `RuleBuilder::build`, goldens updated):
   `RuleError::LimitTooLarge`.
 - `WindowLog` evicted `t = 0` entries early (stage 1).
 
-Open, needs a decision:
-- **Rule/key collision on `:`.** Rule `api:a` + key `b` and rule `api` + key
-  `a:b` both map to `{plimsoll:api:a:b}` and share one window. Options: forbid
-  `:` in rule names, or length-prefix / escape the rule in the key.
+- Rule `api:a` + key `b` and rule `api` + key `a:b` shared one Redis key.
+  Fixed 2026-10-16 by forbidding `:` in rule names (keys come last, so they
+  may contain anything).
 
 ## Traffic shapes (for stages 1–3, generated in-test)
 

@@ -48,6 +48,9 @@ impl Rule {
     /// Start building a rule with the given name.
     ///
     /// The name becomes part of the store key (`{plimsoll:<name>:<key>}`),
+    /// which is why it may not contain `:`: otherwise rule `a:b` with key `c`
+    /// and rule `a` with key `b:c` would share one window. Keys may contain
+    /// anything because they come last.
     /// so two rules with the same name share state.
     pub fn builder(name: impl Into<String>) -> RuleBuilder {
         RuleBuilder {
@@ -119,10 +122,9 @@ impl RuleBuilder {
         if name.is_empty() {
             return Err(RuleError::EmptyName);
         }
-        if name
-            .chars()
-            .any(|c| matches!(c, '{' | '}' | '"' | '\\') || c.is_whitespace() || c.is_control())
-        {
+        if name.chars().any(|c| {
+            matches!(c, '{' | '}' | ':' | '"' | '\\') || c.is_whitespace() || c.is_control()
+        }) {
             return Err(RuleError::InvalidName(name.to_owned()));
         }
         let limit = match self.limit {
@@ -152,11 +154,12 @@ pub enum RuleError {
     /// The name was empty or only whitespace.
     #[error("rule name must not be empty")]
     EmptyName,
-    /// The name contained braces, quotes, backslashes, whitespace or control
-    /// characters. Braces would interfere with the Redis Cluster hash tag;
+    /// The name contained braces, colons, quotes, backslashes, whitespace or
+    /// control characters. Braces would interfere with the Redis Cluster hash
+    /// tag; colons would let two rule/key pairs map to the same store key;
     /// quotes and backslashes would break the `RateLimit` header strings.
     #[error(
-        "rule name {0:?} must not contain braces, quotes, backslashes, whitespace or control characters"
+        "rule name {0:?} must not contain braces, colons, quotes, backslashes, whitespace or control characters"
     )]
     InvalidName(String),
     /// `limit` was missing or zero.

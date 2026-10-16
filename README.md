@@ -1,5 +1,7 @@
 # plimsoll
 
+[![CI](https://github.com/krishkuchroo/plimsoll/actions/workflows/ci.yml/badge.svg)](https://github.com/krishkuchroo/plimsoll/actions/workflows/ci.yml)
+
 > The Plimsoll line marks the safe load limit on a ship's hull. **plimsoll** marks it for your API.
 
 **One rate limit, shared by every copy of your service.** plimsoll is a Rust library that keeps the count in Redis, so "100 requests per minute" means 100 in total, not 100 per server.
@@ -97,7 +99,7 @@ let login = Rule::builder("login")
 
 - `limit` must be between 1 and 2^53.
 - `window` must be between 1 ms and 366 days.
-- The name must not be empty or contain `{`, `}`, `"`, `\`, whitespace, or control characters.
+- The name must not be empty or contain `{`, `}`, `:`, `"`, `\`, whitespace, or control characters. Use `v1.login` or `v1-login` rather than `v1:login`. (Keys can contain anything.)
 
 ## Metrics
 
@@ -170,6 +172,8 @@ cargo test --workspace
 ```
 
 The suite covers edge cases, randomized checks against a simple reference model, and golden-file regression tests over a dataset of recorded traffic patterns. The Redis tests replay the same data through the real Lua script and require identical results; they need a running Redis (`PLIMSOLL_REDIS_URL`, default `redis://127.0.0.1:6379/`) and skip otherwise. Details are in [TESTING.md](TESTING.md).
+
+Requires Rust 1.88 or newer.
 
 ## Background
 

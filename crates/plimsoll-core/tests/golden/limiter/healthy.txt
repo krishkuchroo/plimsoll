@@ -24,7 +24,7 @@ used > limit is clamped
     RateLimit-Policy: "api";q=10;w=60 | RateLimit: "api";r=0;t=1 | Retry-After: 1 | Cache-Control: no-store
 rule name with colon
     allowed=true degraded=false limit=5 remaining=4 retry_s=- err=-
-    RateLimit-Policy: "v1:login";q=5;w=60 | RateLimit: "v1:login";r=4;t=60
+    RateLimit-Policy: "v1.login";q=5;w=60 | RateLimit: "v1.login";r=4;t=60
 rule name with semicolon
     allowed=true degraded=false limit=5 remaining=4 retry_s=- err=-
     RateLimit-Policy: "a;q=999";q=5;w=60 | RateLimit: "a;q=999";r=4;t=60

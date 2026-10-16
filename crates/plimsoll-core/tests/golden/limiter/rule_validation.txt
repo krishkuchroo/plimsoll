@@ -2,16 +2,17 @@
 "  padded  " Some(1) Some(1s): ok name="padded" limit=1 window=1s
 "" Some(1) Some(1s): err rule name must not be empty
 "   " Some(1) Some(1s): err rule name must not be empty
-"has space" Some(1) Some(1s): err rule name "has space" must not contain braces, quotes, backslashes, whitespace or control characters
-"{tag}" Some(1) Some(1s): err rule name "{tag}" must not contain braces, quotes, backslashes, whitespace or control characters
-"tab\there" Some(1) Some(1s): err rule name "tab\there" must not contain braces, quotes, backslashes, whitespace or control characters
-"nul\0" Some(1) Some(1s): err rule name "nul\0" must not contain braces, quotes, backslashes, whitespace or control characters
+"has space" Some(1) Some(1s): err rule name "has space" must not contain braces, colons, quotes, backslashes, whitespace or control characters
+"{tag}" Some(1) Some(1s): err rule name "{tag}" must not contain braces, colons, quotes, backslashes, whitespace or control characters
+"v1:login" Some(1) Some(1s): err rule name "v1:login" must not contain braces, colons, quotes, backslashes, whitespace or control characters
+"tab\there" Some(1) Some(1s): err rule name "tab\there" must not contain braces, colons, quotes, backslashes, whitespace or control characters
+"nul\0" Some(1) Some(1s): err rule name "nul\0" must not contain braces, colons, quotes, backslashes, whitespace or control characters
 "api" Some(0) Some(1s): err rule limit must be at least 1
 "api" None Some(1s): err rule limit must be at least 1
 "api" Some(1) None: err rule window must be longer than zero
 "api" Some(1) Some(0ns): err rule window must be longer than zero
-"say\"hi" Some(1) Some(1s): err rule name "say\"hi" must not contain braces, quotes, backslashes, whitespace or control characters
-"back\\slash" Some(1) Some(1s): err rule name "back\\slash" must not contain braces, quotes, backslashes, whitespace or control characters
+"say\"hi" Some(1) Some(1s): err rule name "say\"hi" must not contain braces, colons, quotes, backslashes, whitespace or control characters
+"back\\slash" Some(1) Some(1s): err rule name "back\\slash" must not contain braces, colons, quotes, backslashes, whitespace or control characters
 "api" Some(1) Some(1ns): err rule window 1ns is shorter than the minimum of 1ms
 "api" Some(1) Some(999µs): err rule window 999µs is shorter than the minimum of 1ms
 "api" Some(1) Some(1ms): ok name="api" limit=1 window=1ms

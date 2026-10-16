@@ -13,13 +13,13 @@ Reference material lives in `docs-pdf/`:
 - `drl-sigcomm07.pdf` — Raghavan et al., *Cloud Control with Distributed Rate Limiting* (GRD/FPS, gossip, 1/N degradation). Basis for `LocalFallback` and the long-term roadmap.
 - `distributed_rate_limiter.pdf` — a re-implementation of the SIGCOMM paper; practical tuning notes.
 
-## Current status (2026-10-12)
+## Current status (2026-10-16)
 
-**Phase 1 (MVP) is done; Phase 2 (release-ready) has not started.** Nothing is published to crates.io yet.
+**Phase 1 (MVP) is done; Phase 2 (release-ready) is in progress:** tests and CI are in place. Nothing is published to crates.io yet.
 
 - All three crates build; `clippy -D warnings`, `fmt` and rustdoc are clean.
 - `docker compose up --build` smoke test passed: 10/60s shared across both instances, 429 + headers, 5-per-instance fallback with Redis stopped, recovery on restart.
-- Testing started 2026-10-15 at the user's request; plan and stages in `TESTING.md`. Stages 1–2 done: `WindowLog` unit + property tests, golden regression suites over a trace dataset (`crates/plimsoll-core/tests/`), and Redis-vs-`WindowLog` differential tests (`crates/plimsoll-redis/tests/differential.rs`, needs a local Redis). The Lua script has a tests-only clock (`ARGV[4]`, `test-clock` feature).
+- Testing started 2026-10-15 at the user's request; plan and stages in `TESTING.md`. Stages 1–3 done (concurrency tests in `tests/concurrency.rs` of both crates); CI in `.github/workflows/ci.yml` runs fmt, clippy, rustdoc, all tests against a Redis service, and an MSRV (1.88) check. Earlier stages: `WindowLog` unit + property tests, golden regression suites over a trace dataset (`crates/plimsoll-core/tests/`), and Redis-vs-`WindowLog` differential tests (`crates/plimsoll-redis/tests/differential.rs`, needs a local Redis). The Lua script has a tests-only clock (`ARGV[4]`, `test-clock` feature).
 - There is no UI. plimsoll is a library; the only runnable thing is the axum demo, which returns JSON and serves Prometheus metrics at `/metrics`.
 - Unconfirmed defaults chosen during the build (fallback `limit` reporting, `Deny` retry-after, `ceil` share, fixed `plimsoll` key prefix, 250 ms timeout) are listed under "Known limitations" and "Open decisions" in `PLAN.md`. Treat them as open, not locked.
 
@@ -41,7 +41,7 @@ Do not change these without asking the user.
 
 | Area | Decision |
 |---|---|
-| Language | Rust, edition 2024, tokio async |
+| Language | Rust, edition 2024, tokio async, MSRV 1.88 |
 | Layout | Cargo workspace: `plimsoll-core` (types, `Store` trait, `Rule` builder, `Decision`, local in-memory store; no network I/O), `plimsoll-redis` (Redis store + Lua), `plimsoll` (facade, re-exports, `redis` feature) |
 | Algorithm | Sliding window log, stored as a **deque** (Redis LIST), not a sorted set |
 | Weighted cost | `cost` param (default 1). Parallel `ts` and `cost` deques popped in lockstep + a running `sum` key. Cost deque is consulted on eviction and when computing `retry_after` on denial |
