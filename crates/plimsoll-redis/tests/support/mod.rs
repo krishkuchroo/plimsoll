@@ -6,6 +6,8 @@
 
 #![allow(dead_code)]
 
+pub mod proxy;
+
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use plimsoll_redis::RedisStore;

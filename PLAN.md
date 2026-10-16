@@ -35,6 +35,7 @@ What "done" looks like at 1.0:
 - [x] Stage 2 (Redis vs `WindowLog` differential tests) done 2026-10-15, using the `test-clock` feature (optional `ARGV[4]` in the Lua script; see `TESTING.md`)
 - [x] **Breaking (pre-release):** `RuleBuilder::build` now rejects windows under `MIN_WINDOW` (1 ms), limits over `MAX_LIMIT` (2^53), and rule names containing `"`, `\` or `:` (`:` added 2026-10-16 to stop rule/key pairs colliding in Redis). New `RuleError::{WindowTooShort, LimitTooLarge}` variants; new consts `MIN_WINDOW`, `MAX_LIMIT`. Added 2026-10-15
 - [x] Fix: `WindowLog` evicted entries at `t = 0` while `now < window` (saturating cutoff), unlike the Lua script. Found by the stage 1 property test
+- [x] Fault-injection tests (stage 4) with an in-test proxy, 2026-10-16; see `TESTING.md`
 - [x] CI: fmt, clippy, rustdoc, tests against a Redis service, MSRV check (`.github/workflows/ci.yml`, 2026-10-16)
 - [x] MSRV corrected from 1.85 to 1.88: `redis` 1.7 requires 1.88, so 1.85 never built (found while adding the CI MSRV job)
 - [ ] Benchmarks (criterion) + a load-test write-up

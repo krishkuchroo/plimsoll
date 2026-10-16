@@ -28,7 +28,7 @@ hard-coding expected numbers where possible.
 | 1 | Edge-case unit tests + property test of `WindowLog` vs a brute-force model | `crates/plimsoll-core/tests/window_log.rs` | nothing | done; found and fixed the t = 0 eviction bug (2026-10-15) |
 | 2 | Redis vs `WindowLog` differential test: same traces + 64 random sequences, plus real-clock TTL check and odd keys | `crates/plimsoll-redis/tests/differential.rs` | local Redis | done 2026-10-15; verified it catches an injected off-by-one in the Lua eviction |
 | 3 | Concurrency: 4 Redis connections x 8 threads (exact count, serialised `used` 1..=N, weighted costs, 50 isolated keys); `LocalStore` and `LocalFallback` share under 8 OS threads | `crates/plimsoll-redis/tests/concurrency.rs`, `crates/plimsoll-core/tests/concurrency.rs` | local Redis | done 2026-10-16 |
-| 4 | Faults: Toxiproxy between demo and Redis (latency, resets, timeout edge, `SCRIPT FLUSH`, restart); check invariant 5 and recovery | `docker-compose.test.yml` | Docker | todo |
+| 4 | Faults via an in-test TCP proxy (`tests/support/proxy.rs`, Toxiproxy-style: refuse, latency, blackhole, cut): each policy when Redis is down, latency below/above the timeout, reconnect after cuts, full outage cycle (invariant 5), `SCRIPT FLUSH`, lost keys | `crates/plimsoll-redis/tests/faults.rs` | local Redis | done 2026-10-16; verified it catches a broken fallback share and a missing timeout |
 | 5 | Load: `oha`/`k6` against both demo instances, p50/p99 latency, Redis memory per key | `bench/` | Docker | todo |
 
 ## Regression suite
@@ -59,6 +59,17 @@ Fixed 2026-10-15 (in `RuleBuilder::build`, goldens updated):
 - Rule `api:a` + key `b` and rule `api` + key `a:b` shared one Redis key.
   Fixed 2026-10-16 by forbidding `:` in rule names (keys come last, so they
   may contain anything).
+
+### What stage 4 showed
+
+- A slow (500 ms) or silent Redis turns into a `Timeout` decision in under
+  2x the configured timeout; requests never stall.
+- After connections are cut the limiter is back on Redis within 3 checks.
+- Outage cycle, limit 20 over 4 instances: 8 from Redis, 5 from fallback,
+  then 12 more from Redis = 25 = limit + one share. Fallback admissions are
+  not written back to Redis (documented limitation).
+- Deleted keys reset the window (documented limitation; Redis without
+  persistence behaves the same after a restart).
 
 ## Traffic shapes (for stages 1–3, generated in-test)
 
