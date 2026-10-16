@@ -75,17 +75,34 @@ if sum + cost <= limit then
 else
   -- Walk from the oldest entry until enough cost has expired for this
   -- request to fit. If it never fits, report the whole window.
-  local need = sum + cost - limit
-  local freed = 0
+  --
+  -- Costs are read in batches that double in size (64, 128, 256, ...) and
+  -- the walk stops as soon as enough is freed, so a typical denial (cost 1)
+  -- reads one small batch, and a full walk takes O(log n) calls instead of
+  -- n. Only the timestamp of the entry that frees enough is read.
   retry_after = window
-  local tss = redis.call('LRANGE', ts_key, 0, -1)
-  local costs = redis.call('LRANGE', cost_key, 0, -1)
-  for i = 1, #tss do
-    freed = freed + tonumber(costs[i] or '0')
-    if freed >= need then
-      retry_after = tonumber(tss[i]) + window - now
+  if cost <= limit then
+    local need = sum + cost - limit
+    local freed = 0
+    local batch = 64
+    local start = 0
+    local found = nil
+    while not found do
+      local costs = redis.call('LRANGE', cost_key, start, start + batch - 1)
+      if #costs == 0 then break end
+      for i = 1, #costs do
+        freed = freed + tonumber(costs[i])
+        if freed >= need then
+          found = start + i - 1
+          break
+        end
+      end
+      start = start + batch
+      batch = batch * 2
+    end
+    if found then
+      retry_after = tonumber(redis.call('LINDEX', ts_key, found)) + window - now
       if retry_after < 0 then retry_after = 0 end
-      break
     end
   end
 end

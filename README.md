@@ -165,6 +165,10 @@ Every allowed request is recorded as a timestamp and a cost. Each `(rule, key)` 
 
 On each check, one Lua script reads Redis's clock, drops entries older than the window, and allows the request if `sum + cost <= limit`. Denied requests are not recorded, so retrying doesn't make things worse. Keys expire on their own after one idle window. The `{...}` hash tag keeps all three keys together, ready for Redis Cluster.
 
+## Performance
+
+On a laptop with local Redis: ~100 µs per check, ~53 000 checks/s from one Redis, ~13 bytes of Redis memory per request in the window. Details and how to reproduce: [BENCHMARKS.md](BENCHMARKS.md).
+
 ## Testing
 
 ```sh

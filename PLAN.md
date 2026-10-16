@@ -38,7 +38,7 @@ What "done" looks like at 1.0:
 - [x] Fault-injection tests (stage 4) with an in-test proxy, 2026-10-16; see `TESTING.md`
 - [x] CI: fmt, clippy, rustdoc, tests against a Redis service, MSRV check (`.github/workflows/ci.yml`, 2026-10-16)
 - [x] MSRV corrected from 1.85 to 1.88: `redis` 1.7 requires 1.88, so 1.85 never built (found while adding the CI MSRV job)
-- [ ] Benchmarks (criterion) + a load-test write-up
+- [x] Benchmarks (criterion) + a load-test write-up: `BENCHMARKS.md`, 2026-10-16. Fixed O(n) Lua denials found by it (10x faster cost-1 denials at limit 10 000)
 - [ ] rustdoc for every public item, crate-level examples
 - [ ] CHANGELOG, CONTRIBUTING, issue templates
 - [ ] Publish `plimsoll-core`, `plimsoll-redis`, `plimsoll` 0.1.0
@@ -63,7 +63,8 @@ What "done" looks like at 1.0:
 ## Known limitations (MVP)
 - Clock going backwards is handled by clamping to the newest entry, not fully solved.
 - Single Redis node only.
-- Sliding window log stores one entry per allowed request, so memory grows with the limit.
+- Sliding window log stores one entry per allowed request, so memory grows with the limit: ~13 bytes per entry plus ~300 bytes per active key (`BENCHMARKS.md`).
+- A denial for a large cost still walks the log (O(n) in the entries it needs to free); cost-1 denials read one batch.
 - `LocalFallback` needs the instance count configured by hand. Its per-instance share is `ceil(limit / instances)`, so N instances may admit up to N-1 extra requests when `limit` is not divisible by `instances`.
 - Under `OnStoreError::Deny`, `Retry-After` is the full window because the real usage is unknown.
 - `LocalFallback` state starts empty when Redis goes away, so an instance may briefly admit its full share even if the global window was already full. Likewise, requests admitted by the fallback are never written to Redis, so the global count under-reports by that amount once Redis is back (observed: ~1 s of fallback traffic during reconnect after `docker compose start redis`).

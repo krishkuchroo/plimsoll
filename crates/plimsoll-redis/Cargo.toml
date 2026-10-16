@@ -21,7 +21,12 @@ thiserror = { workspace = true }
 test-clock = []
 
 [dev-dependencies]
+criterion = { version = "0.8", features = ["async_tokio"] }
 # Self-dependency so integration tests always get `check_at`.
 plimsoll-redis = { path = ".", features = ["test-clock"] }
 proptest = "1.11.0"
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "sync", "time", "net", "io-util"] }
+
+[[bench]]
+name = "redis"
+harness = false

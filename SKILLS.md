@@ -10,6 +10,7 @@ Playbooks for recurring work in this repo. Follow the steps; check `CLAUDE.md` f
 5. If the return tuple changes, update the parser in the Redis store at the same time.
 6. Keep the `ARGV[4]` test-clock branch working: it must only replace `TIME` and skip expiry, never change decisions.
 7. Run the differential tests against a local Redis (see `TESTING.md`), then smoke test with `docker compose up --build`.
+8. If the change could affect speed, rerun `cargo bench -p plimsoll-redis` and update `BENCHMARKS.md`.
 
 ## Add a new algorithm
 1. Write down its state, memory per key, and accuracy trade-off in `PLAN.md` before coding.

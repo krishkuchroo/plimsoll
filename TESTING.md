@@ -29,7 +29,7 @@ hard-coding expected numbers where possible.
 | 2 | Redis vs `WindowLog` differential test: same traces + 64 random sequences, plus real-clock TTL check and odd keys | `crates/plimsoll-redis/tests/differential.rs` | local Redis | done 2026-10-15; verified it catches an injected off-by-one in the Lua eviction |
 | 3 | Concurrency: 4 Redis connections x 8 threads (exact count, serialised `used` 1..=N, weighted costs, 50 isolated keys); `LocalStore` and `LocalFallback` share under 8 OS threads | `crates/plimsoll-redis/tests/concurrency.rs`, `crates/plimsoll-core/tests/concurrency.rs` | local Redis | done 2026-10-16 |
 | 4 | Faults via an in-test TCP proxy (`tests/support/proxy.rs`, Toxiproxy-style: refuse, latency, blackhole, cut): each policy when Redis is down, latency below/above the timeout, reconnect after cuts, full outage cycle (invariant 5), `SCRIPT FLUSH`, lost keys | `crates/plimsoll-redis/tests/faults.rs` | local Redis | done 2026-10-16; verified it catches a broken fallback share and a missing timeout |
-| 5 | Load: `oha`/`k6` against both demo instances, p50/p99 latency, Redis memory per key | `bench/` | Docker | todo |
+| 5 | Benchmarks (criterion, both crates) and a load generator with a Redis memory report; results in `BENCHMARKS.md` | `crates/*/benches/`, `crates/plimsoll-redis/examples/load.rs` | local Redis | done 2026-10-16; found and fixed O(n) Redis denials |
 
 ## Regression suite
 
@@ -55,6 +55,9 @@ Fixed 2026-10-15 (in `RuleBuilder::build`, goldens updated):
 - Limits above 2^53 lost precision in Lua. Now `MAX_LIMIT = 2^53`, error
   `RuleError::LimitTooLarge`.
 - `WindowLog` evicted `t = 0` entries early (stage 1).
+- Redis denials copied the whole log (1.23 ms at limit 10 000); now batched,
+  ~120 µs (stage 5, `BENCHMARKS.md`). New trace `hand-large-log` covers the
+  batch boundaries.
 
 - Rule `api:a` + key `b` and rule `api` + key `a:b` shared one Redis key.
   Fixed 2026-10-16 by forbidding `:` in rule names (keys come last, so they

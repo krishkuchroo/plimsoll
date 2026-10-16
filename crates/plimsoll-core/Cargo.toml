@@ -11,8 +11,13 @@ keywords.workspace = true
 categories.workspace = true
 
 [dev-dependencies]
+criterion = "0.8"
 proptest = "1.11.0"
 tokio-test = "0.4"
 
 [dependencies]
 thiserror = { workspace = true }
+
+[[bench]]
+name = "core"
+harness = false

@@ -9,6 +9,7 @@
 # allowed 3, denied 2  hand-boundary-exact
 # allowed 4, denied 1  hand-clock-backwards
 # allowed 7, denied 3  hand-fill-and-drain
+# allowed 200, denied 10  hand-large-log
 # allowed 4, denied 2  hand-large-timestamps
 # allowed 3, denied 2  hand-near-zero
 # allowed 4, denied 3  hand-weighted-cost
