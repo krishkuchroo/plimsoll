@@ -56,7 +56,7 @@ mod store;
 mod window_log;
 
 pub use decision::Decision;
-pub use limiter::{LimitError, Limiter, LimiterBuilder};
+pub use limiter::{DEFAULT_DENY_RETRY_AFTER, LimitError, Limiter, LimiterBuilder};
 pub use local::LocalStore;
 pub use metrics::{CheckEvent, LATENCY_BUCKETS, Metrics, Observer, RuleSnapshot};
 pub use rule::{MAX_LIMIT, MAX_WINDOW, MIN_WINDOW, OnStoreError, Rule, RuleBuilder, RuleError};

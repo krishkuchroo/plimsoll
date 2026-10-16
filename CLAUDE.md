@@ -21,7 +21,7 @@ Reference material lives in `docs-pdf/`:
 - `docker compose up --build` smoke test passed: 10/60s shared across both instances, 429 + headers, 5-per-instance fallback with Redis stopped, recovery on restart.
 - Testing started 2026-10-15 at the user's request; plan and stages in `TESTING.md`. Stages 1–5 done (benchmarks and load results in `BENCHMARKS.md`) (concurrency tests in `tests/concurrency.rs` of both crates; fault injection in `crates/plimsoll-redis/tests/faults.rs` through the in-test proxy `tests/support/proxy.rs`); CI in `.github/workflows/ci.yml` runs fmt, clippy, rustdoc, all tests against a Redis service, and an MSRV (1.88) check. Earlier stages: `WindowLog` unit + property tests, golden regression suites over a trace dataset (`crates/plimsoll-core/tests/`), and Redis-vs-`WindowLog` differential tests (`crates/plimsoll-redis/tests/differential.rs`, needs a local Redis). The Lua script has a tests-only clock (`ARGV[4]`, `test-clock` feature).
 - There is no UI. plimsoll is a library; the only runnable thing is the axum demo, which returns JSON and serves Prometheus metrics at `/metrics`.
-- Unconfirmed defaults chosen during the build (fallback `limit` reporting, `Deny` retry-after, `ceil` share, fixed `plimsoll` key prefix, 250 ms timeout) are listed under "Known limitations" and "Open decisions" in `PLAN.md`. Treat them as open, not locked.
+- The user decided the open MVP defaults on 2026-10-16; see "Decisions taken 2026-10-16" in `PLAN.md` for each choice and its status. Only #4 (legacy `X-RateLimit-*` headers) is still open.
 
 ### Where things live
 
@@ -47,7 +47,7 @@ Do not change these without asking the user.
 | Weighted cost | `cost` param (default 1). Parallel `ts` and `cost` deques popped in lockstep + a running `sum` key. Cost deque is consulted on eviction and when computing `retry_after` on denial |
 | Clock | Redis `TIME` (microseconds) inside the Lua script. Clamp `now = max(now, newest entry)` to survive clocks going backwards (known limitation, revisit later) |
 | Atomicity | All read-evict-check-insert logic runs in one Lua script (EVALSHA via `redis::Script`) |
-| Keys | `{plimsoll:<rule>:<key>}:ts`, `:cost`, `:sum` — shared hash tag so they stay on one slot (Redis Cluster-ready). Keys expire after one window |
+| Keys | `{<prefix>:<rule>:<key>}:ts` (prefix from `RedisConfig`, default `plimsoll`), `:cost`, `:sum` — shared hash tag so they stay on one slot (Redis Cluster-ready). Keys expire after one window |
 | Denied requests | Not counted toward the limit |
 | Store failure | `OnStoreError::{Allow, Deny, LocalFallback}`; per-rule override, global default `LocalFallback` (in-process limit = `limit / instances`). `Decision.degraded = true` when a fallback was used |
 | Rules | Builder API in code (`Rule::builder`). Config files are a later phase |

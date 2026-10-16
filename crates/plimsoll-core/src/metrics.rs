@@ -59,7 +59,7 @@ impl<O: Observer + ?Sized> Observer for Arc<O> {
 }
 
 /// Upper bounds of the store latency histogram buckets, in seconds.
-/// Chosen around the default 250 ms store timeout.
+/// Chosen around the default 100 ms Redis store timeout.
 pub const LATENCY_BUCKETS: [f64; 11] = [
     0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0,
 ];

@@ -36,7 +36,7 @@
 
 mod store;
 
-pub use store::{RedisConfig, RedisStore};
+pub use store::{DEFAULT_PREFIX, RedisConfig, RedisStore};
 
 /// Re-export of the `redis` crate this store is built on, so callers can
 /// build a [`redis::Client`] or [`redis::aio::ConnectionManager`] themselves.

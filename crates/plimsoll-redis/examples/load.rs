@@ -26,8 +26,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use plimsoll_core::{CheckRequest, Limiter, OnStoreError, Rule, Store as _};
-use plimsoll_redis::RedisStore;
 use plimsoll_redis::redis::{self, AsyncCommands};
+use plimsoll_redis::{DEFAULT_PREFIX, RedisStore};
 
 fn env<T: std::str::FromStr>(name: &str, default: T) -> T {
     std::env::var(name)
@@ -131,7 +131,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = redis::Client::open(url.as_str())?;
     let mut conn = client.get_multiplexed_async_connection().await?;
     for key in key_names.iter() {
-        let _: () = conn.del(&RedisStore::keys(&rule_name, key)).await?;
+        let _: () = conn
+            .del(&RedisStore::keys_with_prefix(
+                DEFAULT_PREFIX,
+                &rule_name,
+                key,
+            ))
+            .await?;
     }
 
     println!("\nmemory per (rule, key), all three Redis keys:");
@@ -149,7 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             store.check(request).await?;
         }
         let mut bytes = 0u64;
-        for k in RedisStore::keys(&name, "k") {
+        for k in RedisStore::keys_with_prefix(DEFAULT_PREFIX, &name, "k") {
             let used: Option<u64> = redis::cmd("MEMORY")
                 .arg("USAGE")
                 .arg(&k)
@@ -157,7 +163,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await?;
             bytes += used.unwrap_or(0);
         }
-        let _: () = conn.del(&RedisStore::keys(&name, "k")).await?;
+        let _: () = conn
+            .del(&RedisStore::keys_with_prefix(DEFAULT_PREFIX, &name, "k"))
+            .await?;
         println!(
             "  limit {n:>6}: {bytes:>8} bytes  ({:.1} bytes per entry)",
             bytes as f64 / n as f64

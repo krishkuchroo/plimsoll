@@ -53,7 +53,7 @@ pub use plimsoll_core::*;
 /// Redis-backed store. Enabled by the `redis` feature.
 #[cfg(feature = "redis")]
 pub mod redis {
-    pub use plimsoll_redis::{RedisConfig, RedisStore};
+    pub use plimsoll_redis::{DEFAULT_PREFIX, RedisConfig, RedisStore};
 
     /// The underlying `redis` client crate.
     pub use plimsoll_redis::redis as client;

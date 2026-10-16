@@ -22,7 +22,9 @@ pub enum OnStoreError {
     /// rather than security.
     Allow,
     /// Fail closed: deny the request. Use for abuse-sensitive endpoints such
-    /// as login or password reset.
+    /// as login or password reset. `Retry-After` is the limiter's
+    /// [`deny_retry_after`](crate::LimiterBuilder::deny_retry_after)
+    /// (default 5 s), capped at the window.
     Deny,
     /// Enforce an in-process limit of `limit / instances` until the store is
     /// back. This is the global default. Each instance stays within its share

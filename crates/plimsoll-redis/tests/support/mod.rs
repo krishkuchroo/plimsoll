@@ -10,8 +10,8 @@ pub mod proxy;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use plimsoll_redis::RedisStore;
 use plimsoll_redis::redis::{self, AsyncCommands};
+use plimsoll_redis::{DEFAULT_PREFIX, RedisStore};
 
 pub fn redis_url() -> String {
     std::env::var("PLIMSOLL_REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".into())
@@ -55,5 +55,8 @@ pub fn unique_rule(tag: &str) -> String {
 pub async fn delete_keys(rule: &str, key: &str) {
     let client = redis::Client::open(redis_url()).unwrap();
     let mut conn = client.get_multiplexed_async_connection().await.unwrap();
-    let _: () = conn.del(&RedisStore::keys(rule, key)).await.unwrap();
+    let _: () = conn
+        .del(&RedisStore::keys_with_prefix(DEFAULT_PREFIX, rule, key))
+        .await
+        .unwrap();
 }

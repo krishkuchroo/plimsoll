@@ -60,17 +60,30 @@ What "done" looks like at 1.0:
 - [ ] Membership-aware `1/N` degradation when peers disappear
 - [ ] Multi-region deployments
 
-## Known limitations (MVP)
-- Clock going backwards is handled by clamping to the newest entry, not fully solved.
-- Single Redis node only.
-- Sliding window log stores one entry per allowed request, so memory grows with the limit: ~13 bytes per entry plus ~300 bytes per active key (`BENCHMARKS.md`).
-- A denial for a large cost still walks the log (O(n) in the entries it needs to free); cost-1 denials read one batch.
-- `LocalFallback` needs the instance count configured by hand. Its per-instance share is `ceil(limit / instances)`, so N instances may admit up to N-1 extra requests when `limit` is not divisible by `instances`.
-- Under `OnStoreError::Deny`, `Retry-After` is the full window because the real usage is unknown.
-- `LocalFallback` state starts empty when Redis goes away, so an instance may briefly admit its full share even if the global window was already full. Likewise, requests admitted by the fallback are never written to Redis, so the global count under-reports by that amount once Redis is back (observed: ~1 s of fallback traffic during reconnect after `docker compose start redis`).
+## Known limitations
+- Single Redis node only (Cluster is Phase 3).
+- Sliding window log stores one entry per allowed request: ~13 bytes per entry plus ~300 bytes per active key (`BENCHMARKS.md`). Decided 2026-10-16: keep it as the exact algorithm and add a cheaper approximate one (sliding window counter / GCRA) in Phase 3.
+- A denial for a large cost walks the log (O(n) in the entries it needs to free); cost-1 denials read one batch.
+- `LocalFallback` state starts empty when Redis goes away, so an instance may briefly admit its full share even if the global window was already full.
+- Redis without persistence loses every window on restart. Decided 2026-10-16: document it and recommend AOF or replication; no detection in the library.
+- A clock going backwards is clamped to the newest entry, which can stretch a window slightly. Decided 2026-10-16: leave as is; Redis `TIME` rarely jumps.
 
-## Open decisions (defaults chosen during the MVP build, not yet confirmed)
-- Under `LocalFallback`, `Decision.limit` reports the per-instance share (e.g. 5), not the rule's limit.
-- The Redis key prefix is fixed to `plimsoll`; two deployments sharing one Redis and rule names would collide. A `prefix` option on `RedisConfig` would fix it.
-- `RedisConfig` defaults: 250 ms per-call timeout, 1 s connect timeout, one reconnect attempt per call.
-- Only the structured-field IETF `RateLimit` / `RateLimit-Policy` headers are emitted; no legacy `X-RateLimit-*`.
+## Decisions taken 2026-10-16
+
+| # | Issue | Decision | Status |
+|---|---|---|---|
+| 1 | Fixed key prefix let deployments sharing a Redis collide | `RedisConfig::prefix` (default `plimsoll`) and `RedisStore::with_prefix` | done |
+| 2 | `Decision.limit` under `LocalFallback` | keep reporting the per-instance share | done (no change) |
+| 3 | Default timeout | 100 ms (was 250 ms); 1 s connect, one reconnect attempt | done |
+| 4 | Legacy `X-RateLimit-*` headers | **open**, awaiting the user's choice; IETF headers only for now | open |
+| 5 | `Retry-After` under `Deny` was the full window | `LimiterBuilder::deny_retry_after`, default 5 s, capped at the window | done |
+| 6 | `ceil(limit / N)` share overshoots by up to N-1 | exact split: `floor(limit / N)`, plus one for the first `limit % N` instances by index | in progress |
+| 7 | Fallback admissions never reach Redis | write them back to Redis once it recovers | planned |
+| 8 | Instance count set by hand | instances register in Redis with a TTL; count and index are discovered | planned |
+| 9 | Redis restart without persistence resets limits | document; recommend AOF/replication | done (docs) |
+| 10 | Memory per entry | keep; add approximate algorithm in Phase 3 | done (docs) |
+| 11 | Clock going backwards | leave as is | done (docs) |
+
+### Breaking API changes (pre-release, 2026-10-16)
+- `RedisStore::keys(rule, key)` is now a method (`store.keys(rule, key)`) because the prefix is per store; `RedisStore::keys_with_prefix(prefix, rule, key)` replaces the old associated function.
+- `RedisConfig` has a new public `prefix` field (construct it with `RedisConfig::default()` and the builder methods).

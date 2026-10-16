@@ -1,0 +1,12 @@
+default, 60s window
+    allowed=false degraded=true limit=5 remaining=0 retry_s=5 err=store unavailable: down
+    RateLimit-Policy: "api";q=5;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 5 | Cache-Control: no-store
+custom 2s, 60s window
+    allowed=false degraded=true limit=5 remaining=0 retry_s=2 err=store unavailable: down
+    RateLimit-Policy: "api";q=5;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 2 | Cache-Control: no-store
+default capped by 3s window
+    allowed=false degraded=true limit=5 remaining=0 retry_s=3 err=store unavailable: down
+    RateLimit-Policy: "api";q=5;w=3 | RateLimit: "api";r=0;t=3 | Retry-After: 3 | Cache-Control: no-store
+custom 1500ms rounds up
+    allowed=false degraded=true limit=5 remaining=0 retry_s=2 err=store unavailable: down
+    RateLimit-Policy: "api";q=5;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 2 | Cache-Control: no-store

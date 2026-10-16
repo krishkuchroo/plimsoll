@@ -13,8 +13,8 @@ use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use plimsoll_core::{CheckRequest, Store};
-use plimsoll_redis::RedisStore;
 use plimsoll_redis::redis::{self, AsyncCommands};
+use plimsoll_redis::{DEFAULT_PREFIX, RedisStore};
 
 fn url() -> String {
     std::env::var("PLIMSOLL_REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".into())
@@ -33,7 +33,10 @@ fn request<'a>(rule: &'a str, limit: u64, cost: u64) -> CheckRequest<'a> {
 async fn cleanup(rule: &str) {
     let client = redis::Client::open(url()).unwrap();
     let mut conn = client.get_multiplexed_async_connection().await.unwrap();
-    let _: () = conn.del(&RedisStore::keys(rule, "k")).await.unwrap();
+    let _: () = conn
+        .del(&RedisStore::keys_with_prefix(DEFAULT_PREFIX, rule, "k"))
+        .await
+        .unwrap();
 }
 
 fn redis_check(c: &mut Criterion) {

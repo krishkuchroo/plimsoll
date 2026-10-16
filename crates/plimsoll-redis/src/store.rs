@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
 
 use plimsoll_core::{CheckOutcome, CheckRequest, Store, StoreError};
@@ -8,15 +9,17 @@ use redis::{Client, IntoConnectionInfo, RedisError, Script};
 /// Lua source, compiled once per process and loaded into Redis on first use.
 const SLIDING_WINDOW_LUA: &str = include_str!("sliding_window.lua");
 
-/// Key prefix shared by every plimsoll key.
-const KEY_PREFIX: &str = "plimsoll";
+/// Default key prefix: keys look like `{plimsoll:<rule>:<key>}:ts`.
+pub const DEFAULT_PREFIX: &str = "plimsoll";
 
 /// Connection and timeout settings for [`RedisStore`].
 #[derive(Debug, Clone)]
 pub struct RedisConfig {
     /// Upper bound on one check, including any reconnect attempt. When it
     /// elapses the limiter sees [`StoreError::Timeout`] and applies the
-    /// rule's `OnStoreError` policy. Default: 250 ms.
+    /// rule's `OnStoreError` policy. Default: 100 ms, far above a healthy
+    /// Redis round trip (well under 1 ms locally, a few ms across a
+    /// network) but short enough that a struggling Redis adds little delay.
     pub timeout: Duration,
     /// Time allowed to establish a TCP connection. Default: 1 s.
     pub connect_timeout: Duration,
@@ -28,15 +31,21 @@ pub struct RedisConfig {
     /// first check opens the connection. When `false` (the default) it
     /// connects eagerly and fails fast if Redis is unreachable.
     pub lazy: bool,
+    /// First segment of every Redis key. Give each deployment that shares a
+    /// Redis its own prefix so rules with the same name don't share limits.
+    /// Must be non-empty and must not contain `{`, `}`, `:`, whitespace or
+    /// control characters. Default: [`DEFAULT_PREFIX`].
+    pub prefix: String,
 }
 
 impl Default for RedisConfig {
     fn default() -> Self {
         Self {
-            timeout: Duration::from_millis(250),
+            timeout: Duration::from_millis(100),
             connect_timeout: Duration::from_secs(1),
             reconnect_retries: 1,
             lazy: false,
+            prefix: DEFAULT_PREFIX.to_owned(),
         }
     }
 }
@@ -60,6 +69,12 @@ impl RedisConfig {
         self
     }
 
+    /// Set the key prefix. See [`RedisConfig::prefix`](#structfield.prefix).
+    pub fn prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.prefix = prefix.into();
+        self
+    }
+
     fn manager_config(&self) -> ConnectionManagerConfig {
         ConnectionManagerConfig::new()
             .set_connection_timeout(Some(self.connect_timeout))
@@ -78,12 +93,14 @@ pub struct RedisStore {
     conn: ConnectionManager,
     script: Script,
     timeout: Duration,
+    prefix: Arc<str>,
 }
 
 impl std::fmt::Debug for RedisStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RedisStore")
             .field("timeout", &self.timeout)
+            .field("prefix", &self.prefix)
             .field("script_sha", &self.script.get_hash())
             .finish_non_exhaustive()
     }
@@ -103,6 +120,7 @@ impl RedisStore {
         url: impl IntoConnectionInfo,
         config: RedisConfig,
     ) -> Result<Self, StoreError> {
+        validate_prefix(&config.prefix)?;
         let client = Client::open(url).map_err(map_error)?;
         let manager_config = config.manager_config();
         let conn = if config.lazy {
@@ -116,17 +134,34 @@ impl RedisStore {
             .map_err(|_| StoreError::Timeout(config.connect_timeout + config.timeout))?
             .map_err(map_error)?
         };
-        Ok(Self::from_manager(conn, config.timeout))
+        let mut store = Self::from_manager(conn, config.timeout);
+        store.prefix = Arc::from(config.prefix.as_str());
+        Ok(store)
     }
 
     /// Wrap an existing connection manager. Use this to share a connection
-    /// with the rest of your application.
+    /// with the rest of your application. Uses [`DEFAULT_PREFIX`]; see
+    /// [`RedisStore::with_prefix`] to change it.
     pub fn from_manager(conn: ConnectionManager, timeout: Duration) -> Self {
         Self {
             conn,
             script: Script::new(SLIDING_WINDOW_LUA),
             timeout,
+            prefix: Arc::from(DEFAULT_PREFIX),
         }
+    }
+
+    /// Use a different key prefix. Fails if the prefix is empty or contains
+    /// `{`, `}`, `:`, whitespace or control characters.
+    pub fn with_prefix(mut self, prefix: &str) -> Result<Self, StoreError> {
+        validate_prefix(prefix)?;
+        self.prefix = Arc::from(prefix);
+        Ok(self)
+    }
+
+    /// The key prefix in use.
+    pub fn prefix(&self) -> &str {
+        &self.prefix
     }
 
     /// The per-check timeout.
@@ -134,9 +169,15 @@ impl RedisStore {
         self.timeout
     }
 
-    /// The three keys used for a `(rule, key)` pair, in `KEYS` order.
-    pub fn keys(rule: &str, key: &str) -> [String; 3] {
-        let tag = format!("{{{KEY_PREFIX}:{rule}:{key}}}");
+    /// The three Redis keys this store uses for a `(rule, key)` pair, in
+    /// `KEYS` order: `ts`, `cost`, `sum`.
+    pub fn keys(&self, rule: &str, key: &str) -> [String; 3] {
+        Self::keys_with_prefix(&self.prefix, rule, key)
+    }
+
+    /// The three Redis keys for a `(rule, key)` pair under `prefix`.
+    pub fn keys_with_prefix(prefix: &str, rule: &str, key: &str) -> [String; 3] {
+        let tag = format!("{{{prefix}:{rule}:{key}}}");
         [
             format!("{tag}:ts"),
             format!("{tag}:cost"),
@@ -161,7 +202,7 @@ impl RedisStore {
         request: CheckRequest<'_>,
         now_us: Option<u64>,
     ) -> Result<CheckOutcome, StoreError> {
-        let [ts, cost, sum] = Self::keys(request.rule, request.key);
+        let [ts, cost, sum] = self.keys(request.rule, request.key);
         let mut conn = self.conn.clone();
         let mut invocation = self.script.prepare_invoke();
         invocation
@@ -218,6 +259,21 @@ fn parse_reply(
         },
         reset_after: Duration::from_micros(micros("reset_after", reset_after)?),
     })
+}
+
+/// A prefix ends up inside the `{...}` hash tag and before the rule name, so
+/// braces would break the tag and a `:` would let two prefixes collide.
+fn validate_prefix(prefix: &str) -> Result<(), StoreError> {
+    let bad = prefix.is_empty()
+        || prefix
+            .chars()
+            .any(|c| matches!(c, '{' | '}' | ':') || c.is_whitespace() || c.is_control());
+    if bad {
+        return Err(StoreError::Other(format!(
+            "invalid key prefix {prefix:?}: must be non-empty without braces, colons, whitespace or control characters"
+        )));
+    }
+    Ok(())
 }
 
 fn map_error(err: RedisError) -> StoreError {

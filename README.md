@@ -79,7 +79,7 @@ Pick a policy per rule with `.on_store_error(...)`:
 |---|---|---|
 | `LocalFallback` (default) | Each server enforces its share, `ceil(limit / instances)`, in memory | Most APIs |
 | `Allow` | Let everything through | Limits that only protect capacity |
-| `Deny` | Reject everything, `Retry-After` = full window | Login, password reset, anything abuse-sensitive |
+| `Deny` | Reject everything, with a short `Retry-After` (5 s by default, `deny_retry_after` to change) | Login, password reset, anything abuse-sensitive |
 
 ```rust
 use plimsoll::OnStoreError;
@@ -92,6 +92,23 @@ let login = Rule::builder("login")
 ```
 
 `instances(n)` on the limiter tells `LocalFallback` how many servers share the limit. Every degraded answer has `degraded = true` and `store_error` set.
+
+## Several apps, one Redis
+
+Give each deployment its own key prefix so two apps with a rule called `api` don't share a limit:
+
+```rust
+use plimsoll::redis::{RedisConfig, RedisStore};
+
+let config = RedisConfig::default()
+    .prefix("billing")                       // default: "plimsoll"
+    .timeout(Duration::from_millis(100));    // the default; raise it for slow networks
+let store = RedisStore::connect_with("redis://127.0.0.1/", config).await?;
+```
+
+## Running Redis for plimsoll
+
+Limits live only in Redis. If Redis restarts without persistence, every window starts over. Turn on AOF (`appendonly yes`) or use a replica if that matters for you.
 
 ## Rule limits
 

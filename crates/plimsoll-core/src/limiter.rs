@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::{
     CheckEvent, CheckRequest, Decision, LocalStore, Observer, OnStoreError, Rule, Store, StoreError,
@@ -16,8 +16,13 @@ pub struct Limiter<S> {
     local: LocalStore,
     instances: u32,
     on_store_error: OnStoreError,
+    deny_retry_after: Duration,
     observer: Option<Arc<dyn Observer>>,
 }
+
+/// Default `Retry-After` for requests denied by [`OnStoreError::Deny`]: short,
+/// so clients come back soon after the store recovers.
+pub const DEFAULT_DENY_RETRY_AFTER: Duration = Duration::from_secs(5);
 
 impl<S: std::fmt::Debug> std::fmt::Debug for Limiter<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -25,6 +30,7 @@ impl<S: std::fmt::Debug> std::fmt::Debug for Limiter<S> {
             .field("store", &self.store)
             .field("instances", &self.instances)
             .field("on_store_error", &self.on_store_error)
+            .field("deny_retry_after", &self.deny_retry_after)
             .field("observer", &self.observer.is_some())
             .finish_non_exhaustive()
     }
@@ -37,6 +43,7 @@ impl<S: Store> Limiter<S> {
             store,
             instances: 1,
             on_store_error: OnStoreError::default(),
+            deny_retry_after: DEFAULT_DENY_RETRY_AFTER,
             observer: None,
         }
     }
@@ -142,7 +149,7 @@ impl<S: Store> Limiter<S> {
                 cost: request.cost,
                 window: request.window,
                 remaining: 0,
-                retry_after: Some(request.window),
+                retry_after: Some(self.deny_retry_after.min(request.window)),
                 reset_after: request.window,
                 degraded: true,
                 store_error: None,
@@ -184,6 +191,7 @@ pub struct LimiterBuilder<S> {
     store: S,
     instances: u32,
     on_store_error: OnStoreError,
+    deny_retry_after: Duration,
     observer: Option<Arc<dyn Observer>>,
 }
 
@@ -193,6 +201,7 @@ impl<S: std::fmt::Debug> std::fmt::Debug for LimiterBuilder<S> {
             .field("store", &self.store)
             .field("instances", &self.instances)
             .field("on_store_error", &self.on_store_error)
+            .field("deny_retry_after", &self.deny_retry_after)
             .field("observer", &self.observer.is_some())
             .finish()
     }
@@ -214,6 +223,15 @@ impl<S: Store> LimiterBuilder<S> {
         self
     }
 
+    /// `Retry-After` for requests denied by [`OnStoreError::Deny`] while the
+    /// store is down. The real usage is unknown then, so this is just how
+    /// soon clients should try again; it is capped at the rule's window.
+    /// Defaults to [`DEFAULT_DENY_RETRY_AFTER`] (5 s).
+    pub fn deny_retry_after(mut self, retry_after: Duration) -> Self {
+        self.deny_retry_after = retry_after;
+        self
+    }
+
     /// Call `observer` once after every check, for metrics or logging.
     /// See [`Metrics`](crate::Metrics) for a ready-made collector.
     /// Replaces any observer set earlier.
@@ -229,6 +247,7 @@ impl<S: Store> LimiterBuilder<S> {
             local: LocalStore::new(),
             instances: self.instances,
             on_store_error: self.on_store_error,
+            deny_retry_after: self.deny_retry_after,
             observer: self.observer,
         }
     }

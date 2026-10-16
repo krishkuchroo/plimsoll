@@ -289,3 +289,34 @@ fn rule_validation() {
     }
     assert_golden("limiter/rule_validation", &out);
 }
+
+/// `Retry-After` under `Deny`: the default, a custom value, and the cap at
+/// the rule's window.
+#[test]
+fn deny_retry_after() {
+    let down = || Scripted(Err(StoreError::Unavailable("down".into())));
+    let mut out = String::new();
+    for (label, custom, window) in [
+        ("default, 60s window", None, Duration::from_secs(60)),
+        (
+            "custom 2s, 60s window",
+            Some(Duration::from_secs(2)),
+            Duration::from_secs(60),
+        ),
+        ("default capped by 3s window", None, Duration::from_secs(3)),
+        (
+            "custom 1500ms rounds up",
+            Some(Duration::from_millis(1500)),
+            Duration::from_secs(60),
+        ),
+    ] {
+        let mut b = Limiter::builder(down()).on_store_error(OnStoreError::Deny);
+        if let Some(d) = custom {
+            b = b.deny_retry_after(d);
+        }
+        let limiter = b.build();
+        let d = tokio_test::block_on(limiter.check(&rule("api", 5, window, None), "k")).unwrap();
+        writeln!(out, "{label}\n    {}", render(&d)).unwrap();
+    }
+    assert_golden("limiter/deny_retry_after", &out);
+}

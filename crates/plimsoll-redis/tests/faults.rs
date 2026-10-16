@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use plimsoll_core::{Decision, Limiter, OnStoreError, Rule, StoreError};
 use plimsoll_redis::redis::{self, AsyncCommands};
-use plimsoll_redis::{RedisConfig, RedisStore};
+use plimsoll_redis::{DEFAULT_PREFIX, RedisConfig, RedisStore};
 use support::proxy::{FaultProxy, Mode, upstream_of};
 use support::{connect, delete_keys, redis_url, unique_rule};
 
@@ -94,12 +94,12 @@ async fn unreachable_redis_applies_each_policy() {
         );
     }
 
-    // Deny: nothing through, retry after the full window.
+    // Deny: nothing through, retry after the short default (5 s), not the window.
     let deny = rule(&format!("{name}-deny"), 20, Some(OnStoreError::Deny));
     for _ in 0..5 {
         let (d, _) = check(&s.limiter, &deny).await;
         assert!(!d.allowed && d.degraded);
-        assert_eq!(d.retry_after, Some(WINDOW));
+        assert_eq!(d.retry_after, Some(plimsoll_core::DEFAULT_DENY_RETRY_AFTER));
     }
 
     // LocalFallback: exactly this instance's share, ceil(20 / 4) = 5.
@@ -277,7 +277,10 @@ async fn lost_state_resets_the_window() {
 
     let client = redis::Client::open(redis_url()).unwrap();
     let mut conn = client.get_multiplexed_async_connection().await.unwrap();
-    let _: () = conn.del(&RedisStore::keys(&name, "k")).await.unwrap();
+    let _: () = conn
+        .del(&RedisStore::keys_with_prefix(DEFAULT_PREFIX, &name, "k"))
+        .await
+        .unwrap();
 
     let (d, _) = check(&s.limiter, &r).await;
     assert!(d.allowed && !d.degraded);

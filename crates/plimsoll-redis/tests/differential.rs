@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use common::Trace;
 use plimsoll_core::{CheckOutcome, CheckRequest, Store, WindowLog};
-use plimsoll_redis::RedisStore;
 use plimsoll_redis::redis::{self, AsyncCommands};
+use plimsoll_redis::{DEFAULT_PREFIX, RedisStore};
 use proptest::prelude::*;
 use support::{connect, delete_keys, redis_url, unique_rule};
 
@@ -138,7 +138,7 @@ async fn real_clock_limits_and_sets_ttl() {
 
     let client = redis::Client::open(redis_url()).unwrap();
     let mut conn = client.get_multiplexed_async_connection().await.unwrap();
-    for key in RedisStore::keys(&rule, "k") {
+    for key in RedisStore::keys_with_prefix(DEFAULT_PREFIX, &rule, "k") {
         let ttl: i64 = conn.pttl(&key).await.unwrap();
         assert!((1..=60_000).contains(&ttl), "{key} has PTTL {ttl}");
     }
@@ -178,5 +178,44 @@ async fn odd_keys_are_isolated() {
     }
     for key in keys {
         delete_keys(&rule, key).await;
+    }
+}
+
+/// Two deployments with different prefixes keep separate limits for the
+/// same rule and key; invalid prefixes are rejected up front.
+#[tokio::test]
+async fn prefixes_isolate_deployments() {
+    let Some(_) = connect().await else { return };
+    let rule = unique_rule("prefix");
+    let app_a = plimsoll_redis::RedisConfig::default().prefix("app-a");
+    let app_b = plimsoll_redis::RedisConfig::default().prefix("app-b");
+    let a = RedisStore::connect_with(redis_url(), app_a).await.unwrap();
+    let b = RedisStore::connect_with(redis_url(), app_b).await.unwrap();
+    let request = CheckRequest {
+        rule: &rule,
+        key: "k",
+        limit: 1,
+        window: Duration::from_secs(60),
+        cost: 1,
+    };
+    assert!(a.check(request).await.unwrap().allowed);
+    assert!(!a.check(request).await.unwrap().allowed);
+    assert!(
+        b.check(request).await.unwrap().allowed,
+        "app-b shares app-a's limit"
+    );
+    assert!(a.keys(&rule, "k")[0].starts_with("{app-a:"));
+
+    let client = redis::Client::open(redis_url()).unwrap();
+    let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+    let _: () = conn.del(&a.keys(&rule, "k")).await.unwrap();
+    let _: () = conn.del(&b.keys(&rule, "k")).await.unwrap();
+
+    for bad in ["", "a:b", "{x}", "has space"] {
+        let config = plimsoll_redis::RedisConfig::default().prefix(bad);
+        assert!(
+            RedisStore::connect_with(redis_url(), config).await.is_err(),
+            "prefix {bad:?} was accepted"
+        );
     }
 }

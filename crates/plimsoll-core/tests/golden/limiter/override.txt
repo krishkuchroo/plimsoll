@@ -2,8 +2,8 @@ rule policy None
     allowed=true degraded=true limit=4 remaining=3 retry_s=- err=store call timed out after 250ms
     RateLimit-Policy: "api";q=4;w=60 | RateLimit: "api";r=3;t=60
 rule policy Some(Deny)
-    allowed=false degraded=true limit=4 remaining=0 retry_s=60 err=store call timed out after 250ms
-    RateLimit-Policy: "api";q=4;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 60 | Cache-Control: no-store
+    allowed=false degraded=true limit=4 remaining=0 retry_s=5 err=store call timed out after 250ms
+    RateLimit-Policy: "api";q=4;w=60 | RateLimit: "api";r=0;t=60 | Retry-After: 5 | Cache-Control: no-store
 rule policy Some(LocalFallback)
     allowed=true degraded=true limit=4 remaining=3 retry_s=- err=store call timed out after 250ms
     RateLimit-Policy: "api";q=4;w=60 | RateLimit: "api";r=3;t=60
