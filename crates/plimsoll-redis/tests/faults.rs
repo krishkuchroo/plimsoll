@@ -188,13 +188,12 @@ async fn recovers_after_connections_are_cut() {
 ///
 /// 1. healthy: 8 admitted by Redis
 /// 2. outage: this instance admits its share of 5 from memory
-/// 3. recovered: Redis still holds 8 (fallback requests were never written
-///    to it), so 12 more are admitted before the shared limit bites
+/// 3. recovered: the 5 fallback admissions are written back, so Redis holds
+///    13 and only 7 more are admitted
 ///
-/// Total 25 = limit + one instance's share. That is the documented bound
-/// on fallback overshoot (PLAN.md, Known limitations).
+/// Total exactly 20: no overshoot from the outage.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn outage_cycle_overshoot_is_bounded() {
+async fn outage_cycle_stays_within_limit() {
     let Some(s) = setup(4, OnStoreError::LocalFallback).await else {
         return;
     };
@@ -232,8 +231,53 @@ async fn outage_cycle_overshoot_is_bounded() {
     delete_keys(&name, "k").await;
 
     assert_eq!(healthy, 8);
-    assert_eq!(after, 12, "Redis should continue from its own count of 8");
-    assert!(healthy + during + after <= 20 + 5);
+    assert_eq!(after, 7, "Redis should count the 5 fallback admissions");
+    assert_eq!(healthy + during + after, 20);
+}
+
+/// Fallback admissions that have already left the window by the time Redis
+/// is back are not written to it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn expired_fallback_admissions_are_not_written_back() {
+    let Some(s) = setup(1, OnStoreError::LocalFallback).await else {
+        return;
+    };
+    let name = unique_rule("expired");
+    let r = Rule::builder(&name)
+        .limit(3)
+        .window(Duration::from_millis(500))
+        .build()
+        .unwrap();
+    assert!(!check(&s.limiter, &r).await.0.degraded);
+
+    s.proxy.set(Mode::Refuse);
+    s.proxy.cut();
+    for _ in 0..3 {
+        let (d, _) = check(&s.limiter, &r).await;
+        assert!(d.degraded);
+    }
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    s.proxy.set(Mode::Pass);
+
+    // Count what gets admitted from here on, including checks the fallback
+    // answers while the connection comes back.
+    let mut admitted_after_outage = 0;
+    for _ in 0..30 {
+        let (d, _) = check(&s.limiter, &r).await;
+        admitted_after_outage += u64::from(d.allowed);
+        if !d.degraded {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    // Redis holds exactly those; the 3 outage admissions expired first.
+    let client = redis::Client::open(redis_url()).unwrap();
+    let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+    let keys = RedisStore::keys_with_prefix(DEFAULT_PREFIX, &name, "k");
+    let entries: u64 = conn.llen(&keys[0]).await.unwrap();
+    assert_eq!(entries, admitted_after_outage);
+    delete_keys(&name, "k").await;
 }
 
 /// `SCRIPT FLUSH` (e.g. after a Redis restart with a different config) is

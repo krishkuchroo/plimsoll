@@ -64,7 +64,8 @@ What "done" looks like at 1.0:
 - Single Redis node only (Cluster is Phase 3).
 - Sliding window log stores one entry per allowed request: ~13 bytes per entry plus ~300 bytes per active key (`BENCHMARKS.md`). Decided 2026-10-16: keep it as the exact algorithm and add a cheaper approximate one (sliding window counter / GCRA) in Phase 3.
 - A denial for a large cost walks the log (O(n) in the entries it needs to free); cost-1 denials read one batch.
-- `LocalFallback` state starts empty when Redis goes away, so an instance may briefly admit its full share even if the global window was already full.
+- `LocalFallback` state starts empty when Redis goes away, so an instance may admit its full share even if the global window was already full. Write-back (decision 7) makes Redis count those admissions afterwards, so later requests pay for them, but it can't undo them.
+- Write-back records an admission no earlier than the newest entry already in Redis, so it may expire slightly late. That only makes the limit stricter.
 - Redis without persistence loses every window on restart. Decided 2026-10-16: document it and recommend AOF or replication; no detection in the library.
 - A clock going backwards is clamped to the newest entry, which can stretch a window slightly. Decided 2026-10-16: leave as is; Redis `TIME` rarely jumps.
 
@@ -78,7 +79,7 @@ What "done" looks like at 1.0:
 | 4 | Legacy `X-RateLimit-*` headers | **open**, awaiting the user's choice; IETF headers only for now | open |
 | 5 | `Retry-After` under `Deny` was the full window | `LimiterBuilder::deny_retry_after`, default 5 s, capped at the window | done |
 | 6 | `ceil(limit / N)` share overshoots by up to N-1 | exact split: `floor(limit / N)`, plus one for the first `limit % N` instances by index (`LimiterBuilder::instance_index`, `Limiter::set_membership`); default index 0 keeps the old `ceil` behaviour | done |
-| 7 | Fallback admissions never reach Redis | write them back to Redis once it recovers | planned |
+| 7 | Fallback admissions never reach Redis | `Store::backfill` (default no-op) + `backfill.lua`: the limiter remembers fallback admissions (up to `MAX_PENDING_BACKFILL`) and writes the still-live ones to Redis after the first successful check. Outage cycle test now admits exactly the limit (was limit + one share) | done |
 | 8 | Instance count set by hand | `plimsoll_redis::Membership`: instances heartbeat into a Redis sorted set with a TTL (default 15 s) and get the live count and their index; `spawn` keeps the limiter updated; the demo uses it | done |
 | 9 | Redis restart without persistence resets limits | document; recommend AOF/replication | done (docs) |
 | 10 | Memory per entry | keep; add approximate algorithm in Phase 3 | done (docs) |

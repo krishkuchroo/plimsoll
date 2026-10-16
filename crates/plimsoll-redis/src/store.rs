@@ -2,12 +2,14 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use plimsoll_core::{CheckOutcome, CheckRequest, Store, StoreError};
+use plimsoll_core::{Admitted, CheckOutcome, CheckRequest, Store, StoreError};
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use redis::{Client, IntoConnectionInfo, RedisError, Script};
 
 /// Lua source, compiled once per process and loaded into Redis on first use.
 const SLIDING_WINDOW_LUA: &str = include_str!("sliding_window.lua");
+/// Writes fallback admissions back after an outage; see [`Store::backfill`].
+const BACKFILL_LUA: &str = include_str!("backfill.lua");
 
 /// Default key prefix: keys look like `{plimsoll:<rule>:<key>}:ts`.
 pub const DEFAULT_PREFIX: &str = "plimsoll";
@@ -92,6 +94,7 @@ impl RedisConfig {
 pub struct RedisStore {
     conn: ConnectionManager,
     script: Script,
+    backfill_script: Script,
     timeout: Duration,
     prefix: Arc<str>,
 }
@@ -146,6 +149,7 @@ impl RedisStore {
         Self {
             conn,
             script: Script::new(SLIDING_WINDOW_LUA),
+            backfill_script: Script::new(BACKFILL_LUA),
             timeout,
             prefix: Arc::from(DEFAULT_PREFIX),
         }
@@ -237,6 +241,34 @@ impl Store for RedisStore {
         request: CheckRequest<'_>,
     ) -> impl Future<Output = Result<CheckOutcome, StoreError>> + Send {
         self.run(request, None)
+    }
+
+    fn backfill(
+        &self,
+        rule: &str,
+        key: &str,
+        window: Duration,
+        entries: &[Admitted],
+    ) -> impl Future<Output = Result<(), StoreError>> + Send {
+        let [ts, cost, sum] = self.keys(rule, key);
+        let mut invocation = self.backfill_script.prepare_invoke();
+        invocation
+            .key(ts)
+            .key(cost)
+            .key(sum)
+            .arg(u64::try_from(window.as_micros()).unwrap_or(u64::MAX));
+        for e in entries {
+            invocation.arg(e.at_unix_micros).arg(e.cost);
+        }
+        let mut conn = self.conn.clone();
+        let timeout = self.timeout;
+        async move {
+            let _recorded: i64 = tokio::time::timeout(timeout, invocation.invoke_async(&mut conn))
+                .await
+                .map_err(|_| StoreError::Timeout(timeout))?
+                .map_err(map_error)?;
+            Ok(())
+        }
     }
 }
 

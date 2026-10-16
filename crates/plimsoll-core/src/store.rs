@@ -44,6 +44,19 @@ pub struct CheckOutcome {
     pub reset_after: Duration,
 }
 
+/// A request admitted by
+/// [`OnStoreError::LocalFallback`](crate::OnStoreError::LocalFallback) while
+/// the store was unreachable. The [`Limiter`](crate::Limiter) keeps these and
+/// hands them to [`Store::backfill`] once the store answers again, so the
+/// shared window counts them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Admitted {
+    /// When it was admitted, in microseconds since the Unix epoch.
+    pub at_unix_micros: u64,
+    /// Its cost.
+    pub cost: u64,
+}
+
 /// Why a store could not answer a check.
 ///
 /// Backends map their own errors into these variants so that
@@ -79,6 +92,25 @@ pub trait Store: Send + Sync {
         &self,
         request: CheckRequest<'_>,
     ) -> impl Future<Output = Result<CheckOutcome, StoreError>> + Send;
+
+    /// Record requests that were admitted by the in-process fallback while
+    /// this store was unreachable, so the shared window counts them.
+    ///
+    /// `entries` are in admission order. Implementations should skip
+    /// entries already outside `window`, never record one later than their
+    /// own "now", and keep the log ordered (recording an entry slightly late
+    /// is acceptable: it only makes the limit stricter). The default does
+    /// nothing, which suits stores that are never shared.
+    fn backfill(
+        &self,
+        rule: &str,
+        key: &str,
+        window: Duration,
+        entries: &[Admitted],
+    ) -> impl Future<Output = Result<(), StoreError>> + Send {
+        let _ = (rule, key, window, entries);
+        std::future::ready(Ok(()))
+    }
 }
 
 impl<S: Store + ?Sized> Store for Arc<S> {
@@ -88,6 +120,16 @@ impl<S: Store + ?Sized> Store for Arc<S> {
     ) -> impl Future<Output = Result<CheckOutcome, StoreError>> + Send {
         (**self).check(request)
     }
+
+    fn backfill(
+        &self,
+        rule: &str,
+        key: &str,
+        window: Duration,
+        entries: &[Admitted],
+    ) -> impl Future<Output = Result<(), StoreError>> + Send {
+        (**self).backfill(rule, key, window, entries)
+    }
 }
 
 impl<S: Store + ?Sized> Store for &S {
@@ -96,5 +138,15 @@ impl<S: Store + ?Sized> Store for &S {
         request: CheckRequest<'_>,
     ) -> impl Future<Output = Result<CheckOutcome, StoreError>> + Send {
         (**self).check(request)
+    }
+
+    fn backfill(
+        &self,
+        rule: &str,
+        key: &str,
+        window: Duration,
+        entries: &[Admitted],
+    ) -> impl Future<Output = Result<(), StoreError>> + Send {
+        (**self).backfill(rule, key, window, entries)
     }
 }

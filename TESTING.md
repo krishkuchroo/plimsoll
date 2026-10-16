@@ -69,8 +69,9 @@ Fixed 2026-10-15 (in `RuleBuilder::build`, goldens updated):
   2x the configured timeout; requests never stall.
 - After connections are cut the limiter is back on Redis within 3 checks.
 - Outage cycle, limit 20 over 4 instances: 8 from Redis, 5 from fallback,
-  then 12 more from Redis = 25 = limit + one share. Fallback admissions are
-  not written back to Redis (documented limitation).
+  then 7 more from Redis = exactly 20, because fallback admissions are
+  written back on recovery (was 25 before write-back, 2026-10-16).
+  Admissions that expired during the outage are not written back.
 - Deleted keys reset the window (documented limitation; Redis without
   persistence behaves the same after a restart).
 

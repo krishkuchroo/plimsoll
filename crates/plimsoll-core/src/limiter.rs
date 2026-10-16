@@ -1,10 +1,17 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{
-    CheckEvent, CheckRequest, Decision, LocalStore, Observer, OnStoreError, Rule, Store, StoreError,
+    Admitted, CheckEvent, CheckRequest, Decision, LocalStore, Observer, OnStoreError, Rule, Store,
+    StoreError,
 };
+
+/// Most fallback admissions kept for write-back at once. Beyond this, new
+/// ones are not remembered (they were still admitted correctly; the store
+/// just won't hear about them).
+pub const MAX_PENDING_BACKFILL: usize = 100_000;
 
 /// Checks requests against rules using a [`Store`], with a fallback policy
 /// for when the store cannot answer.
@@ -21,6 +28,17 @@ pub struct Limiter<S> {
     on_store_error: OnStoreError,
     deny_retry_after: Duration,
     observer: Option<Arc<dyn Observer>>,
+    /// Fallback admissions not yet written back to the store.
+    pending: Mutex<Pending>,
+    /// Fast check for `pending` being non-empty, so healthy checks never
+    /// take the lock.
+    has_pending: AtomicBool,
+}
+
+#[derive(Debug, Default)]
+struct Pending {
+    by_key: HashMap<(Arc<str>, String), (Duration, Vec<Admitted>)>,
+    len: usize,
 }
 
 /// Default `Retry-After` for requests denied by [`OnStoreError::Deny`]: short,
@@ -120,10 +138,15 @@ impl<S: Store> Limiter<S> {
         let result = self.store.check(request).await;
         let store_latency = started.elapsed();
         let (decision, fallback) = match result {
-            Ok(outcome) => (
-                Decision::from_outcome(rule.name_arc(), limit, cost, rule.window(), outcome),
-                None,
-            ),
+            Ok(outcome) => {
+                if self.has_pending.load(Ordering::Relaxed) {
+                    self.backfill_pending().await;
+                }
+                (
+                    Decision::from_outcome(rule.name_arc(), limit, cost, rule.window(), outcome),
+                    None,
+                )
+            }
             Err(err) => {
                 let policy = rule.on_store_error().unwrap_or(self.on_store_error);
                 (self.degrade(rule, policy, request, err), Some(policy))
@@ -208,12 +231,86 @@ impl<S: Store> Limiter<S> {
                     outcome,
                 );
                 d.degraded = true;
+                if d.allowed {
+                    self.remember(rule, request.key, request.cost);
+                }
                 d
             }
         };
         decision.store_error = Some(err);
         decision
     }
+}
+
+impl<S: Store> Limiter<S> {
+    /// Keep a fallback admission for write-back.
+    fn remember(&self, rule: &Rule, key: &str, cost: u64) {
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        if pending.len >= MAX_PENDING_BACKFILL {
+            return;
+        }
+        pending.len += 1;
+        pending
+            .by_key
+            .entry((rule.name_arc(), key.to_owned()))
+            .or_insert_with(|| (rule.window(), Vec::new()))
+            .1
+            .push(Admitted {
+                at_unix_micros: unix_micros(),
+                cost,
+            });
+        self.has_pending.store(true, Ordering::Relaxed);
+    }
+
+    /// Write remembered fallback admissions to the store. Called after a
+    /// successful check, so the store is reachable. Whatever fails to write
+    /// is kept for the next attempt.
+    async fn backfill_pending(&self) {
+        let taken = {
+            let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+            self.has_pending.store(false, Ordering::Relaxed);
+            std::mem::take(&mut *pending)
+        };
+        let now = unix_micros();
+        let mut failed = Vec::new();
+        for ((rule, key), (window, entries)) in taken.by_key {
+            let window_us = u64::try_from(window.as_micros()).unwrap_or(u64::MAX);
+            let live: Vec<Admitted> = entries
+                .into_iter()
+                .filter(|e| e.at_unix_micros.saturating_add(window_us) > now)
+                .collect();
+            if live.is_empty() {
+                continue;
+            }
+            if self
+                .store
+                .backfill(&rule, &key, window, &live)
+                .await
+                .is_err()
+            {
+                failed.push(((rule, key), (window, live)));
+            }
+        }
+        if !failed.is_empty() {
+            let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+            for (id, (window, entries)) in failed {
+                pending.len += entries.len();
+                pending
+                    .by_key
+                    .entry(id)
+                    .or_insert_with(|| (window, Vec::new()))
+                    .1
+                    .extend(entries);
+            }
+            self.has_pending.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
+fn unix_micros() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_micros()).unwrap_or(u64::MAX))
 }
 
 /// This instance's share of a global limit. The limit is split exactly:
@@ -315,6 +412,8 @@ impl<S: Store> LimiterBuilder<S> {
             on_store_error: self.on_store_error,
             deny_retry_after: self.deny_retry_after,
             observer: self.observer,
+            pending: Mutex::new(Pending::default()),
+            has_pending: AtomicBool::new(false),
         }
     }
 }

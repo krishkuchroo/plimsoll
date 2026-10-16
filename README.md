@@ -103,6 +103,8 @@ membership.clone().spawn(Arc::clone(&limiter), Duration::from_secs(5));
 // on shutdown: membership.leave().await
 ```
 
+When Redis comes back, requests the fallback admitted during the outage are written into the shared window, so the total across the outage stays within the limit.
+
 Each server heartbeats every 5 s; one that stops is dropped after 15 s. The limit is then split exactly: with 10 over 3 servers they get 4, 3 and 3. While Redis is down the heartbeat can't run, so servers keep the last membership they saw, which is what the fallback needs. Without `Membership`, set `.instances(n)` and `.instance_index(i)` on the builder yourself.
 
 Every degraded answer has `degraded = true` and `store_error` set.
